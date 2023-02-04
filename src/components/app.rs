@@ -8,6 +8,7 @@ use yew::Html;
 use yew::Reducible;
 
 use crate::components::create_button::CreateButton;
+use crate::components::credentials_list::CredentialsList;
 use crate::components::get_button::GetButton;
 
 #[derive(Clone, Default, PartialEq)]
@@ -45,6 +46,7 @@ pub fn App() -> Html {
             <div>
                 <CreateButton {on_create} />
                 <GetButton credentials={Rc::clone(&credentials)} />
+                <CredentialsList {credentials} />
             </div>
         </>
     }
