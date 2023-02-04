@@ -10,6 +10,7 @@ use yew::Reducible;
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
 use crate::components::get_button::GetButton;
+use crate::data::CredentialId;
 
 #[derive(Clone, Default, PartialEq)]
 struct AppState {
@@ -18,6 +19,7 @@ struct AppState {
 
 enum AppAction {
     Add(PublicKeyCredential),
+    Delete(CredentialId),
 }
 
 impl Reducible for AppState {
@@ -29,6 +31,12 @@ impl Reducible for AppState {
                 Rc::make_mut(&mut Rc::make_mut(&mut self).credentials).push(cred);
                 self
             }
+
+            Self::Action::Delete(CredentialId(cred_id)) => {
+                Rc::make_mut(&mut Rc::make_mut(&mut self).credentials)
+                    .retain(|c| c.raw_id() != cred_id);
+                self
+            }
         }
     }
 }
@@ -37,8 +45,15 @@ impl Reducible for AppState {
 pub fn App() -> Html {
     let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
-    let on_create = Callback::from(move |cred: PublicKeyCredential| {
-        state.dispatch(AppAction::Add(cred));
+
+    let on_create = {
+        let state = state.clone();
+        Callback::from(move |cred: PublicKeyCredential| {
+            state.dispatch(AppAction::Add(cred));
+        })
+    };
+    let on_delete = Callback::from(move |cred_id| {
+        state.dispatch(AppAction::Delete(cred_id));
     });
 
     html! {
@@ -46,7 +61,7 @@ pub fn App() -> Html {
             <div>
                 <CreateButton {on_create} />
                 <GetButton credentials={Rc::clone(&credentials)} />
-                <CredentialsList {credentials} />
+                <CredentialsList {credentials} {on_delete} />
             </div>
         </>
     }
