@@ -2,6 +2,7 @@ use js_sys::Array;
 use js_sys::ArrayBuffer;
 use js_sys::Promise;
 use js_sys::Uint8Array;
+use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsValue;
 use web_sys::console;
@@ -19,8 +20,9 @@ use web_sys::PublicKeyCredentialType;
 use web_sys::PublicKeyCredentialUserEntity;
 use yew::function_component;
 use yew::html;
-use yew::use_state;
+use yew::use_reducer;
 use yew::Html;
+use yew::Reducible;
 
 fn webauthn_create() -> Result<Promise, JsValue> {
     web_sys::window()
@@ -44,7 +46,7 @@ fn webauthn_create() -> Result<Promise, JsValue> {
         ))
 }
 
-fn webauthn_get(id: &ArrayBuffer) -> Result<Promise, JsValue> {
+fn webauthn_get(ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
     web_sys::window()
         .unwrap()
         .navigator()
@@ -52,78 +54,118 @@ fn webauthn_get(id: &ArrayBuffer) -> Result<Promise, JsValue> {
         .get_with_options(
             CredentialRequestOptions::new().public_key(
                 PublicKeyCredentialRequestOptions::new(&Uint8Array::from([0, 1, 2, 3].as_slice()))
-                    .allow_credentials(&Array::of1(&PublicKeyCredentialDescriptor::new(
-                        id,
-                        PublicKeyCredentialType::PublicKey,
-                    ))),
+                    .allow_credentials(
+                        &ids.iter()
+                            .map(|id| {
+                                PublicKeyCredentialDescriptor::new(
+                                    id,
+                                    PublicKeyCredentialType::PublicKey,
+                                )
+                            })
+                            .collect::<Array>(),
+                    ),
             ),
         )
 }
 
-enum CredentialState {
-    NotCreated,
-    Created(PublicKeyCredential),
+#[derive(Clone, Default)]
+struct WebauthnButtonsState {
+    credentials: Vec<PublicKeyCredential>,
+}
+
+enum WebauthnButtonsAction {
+    Add(PublicKeyCredential),
+}
+
+impl Reducible for WebauthnButtonsState {
+    type Action = WebauthnButtonsAction;
+
+    fn reduce(mut self: Rc<Self>, action: Self::Action) -> Rc<Self> {
+        match action {
+            Self::Action::Add(cred) => {
+                Rc::make_mut(&mut self).credentials.push(cred);
+                self
+            }
+        }
+    }
 }
 
 #[function_component]
 fn WebauthnButtons() -> Html {
-    let state = use_state(|| CredentialState::NotCreated);
+    let state = use_reducer(WebauthnButtonsState::default);
 
-    let credid = match &*state {
-        CredentialState::NotCreated => None,
-        CredentialState::Created(credential) => Some(credential.raw_id()),
+    let credids: Vec<ArrayBuffer> = state
+        .credentials
+        .iter()
+        .map(|cred: &PublicKeyCredential| cred.raw_id())
+        .collect();
+    let credids_empty = credids.is_empty();
+
+    let onclick_create = {
+        let cb = Closure::new(move |cred: JsValue| {
+            console::log_1(&cred);
+            let pkcred = PublicKeyCredential::from(cred);
+            console::log_3(
+                &"attestation_object".into(),
+                &pkcred
+                    .response()
+                    .has_own_property(&"attestationObject".into())
+                    .into(),
+                &AuthenticatorAttestationResponse::from(JsValue::from(pkcred.response()))
+                    .attestation_object(),
+            );
+            console::log_2(
+                &"authenticator_data".into(),
+                &AuthenticatorAssertionResponse::from(JsValue::from(pkcred.response()))
+                    .authenticator_data(),
+            );
+            state.dispatch(WebauthnButtonsAction::Add(pkcred));
+        });
+        move |_| {
+            if let Ok(prom) = webauthn_create() {
+                prom.then(&cb);
+            } else {
+                console::error_1(&"WebAuthn failed".into());
+            }
+        }
     };
 
-    let cb = Closure::once(move |cred: JsValue| {
-        console::log_1(&cred);
-        let pkcred = PublicKeyCredential::from(cred);
-        console::log_3(
-            &"attestation_object".into(),
-            &pkcred
-                .response()
-                .has_own_property(&"attestationObject".into())
-                .into(),
-            &AuthenticatorAttestationResponse::from(JsValue::from(pkcred.response()))
-                .attestation_object(),
-        );
-        console::log_2(
-            &"authenticator_data".into(),
-            &AuthenticatorAssertionResponse::from(JsValue::from(pkcred.response()))
-                .authenticator_data(),
-        );
-        state.set(CredentialState::Created(pkcred));
-    });
-
-    let (onclick, onclick_get) = if let Some(credid) = credid {
-        (
-            None,
-            Some(move |_| {
-                if let Ok(prom) = webauthn_get(&credid) {
-                    prom.then(&cb);
-                } else {
-                    console::error_1(&"WebAuthn failed".into());
-                }
-            }),
-        )
-    } else {
-        (
-            Some({
-                move |_| {
-                    if let Ok(prom) = webauthn_create() {
-                        prom.then(&cb);
-                    } else {
-                        console::error_1(&"WebAuthn failed".into());
-                    }
-                }
-            }),
-            None,
-        )
+    let onclick_get = {
+        let cb = Closure::new(|cred: JsValue| {
+            console::log_1(&cred);
+            let pkcred = PublicKeyCredential::from(cred);
+            console::log_3(
+                &"attestation_object".into(),
+                &pkcred
+                    .response()
+                    .has_own_property(&"attestationObject".into())
+                    .into(),
+                &AuthenticatorAttestationResponse::from(JsValue::from(pkcred.response()))
+                    .attestation_object(),
+            );
+            console::log_2(
+                &"authenticator_data".into(),
+                &AuthenticatorAssertionResponse::from(JsValue::from(pkcred.response()))
+                    .authenticator_data(),
+            );
+        });
+        move |_| {
+            console::log_2(
+                &"cred_ids".into(),
+                &credids.iter().cloned().collect::<Array>(),
+            );
+            if let Ok(prom) = webauthn_get(&credids) {
+                prom.then(&cb);
+            } else {
+                console::error_1(&"WebAuthn failed".into());
+            }
+        }
     };
 
     html! {
         <div>
-            <button {onclick} disabled={onclick.is_none()}>{ "Create" }</button>
-            <button onclick={onclick_get} disabled={onclick_get.is_none()}>{ "Get" }</button>
+            <button onclick={onclick_create} >{ "Create" }</button>
+            <button onclick={onclick_get} disabled={credids_empty}>{ "Get" }</button>
         </div>
     }
 }
