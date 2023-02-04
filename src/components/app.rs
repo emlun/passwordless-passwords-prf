@@ -2,7 +2,7 @@ use std::rc::Rc;
 use web_sys::PublicKeyCredential;
 use yew::function_component;
 use yew::html;
-use yew::use_reducer;
+use yew::use_reducer_eq;
 use yew::Callback;
 use yew::Html;
 use yew::Reducible;
@@ -35,7 +35,7 @@ impl Reducible for AppState {
 
 #[function_component]
 pub fn App() -> Html {
-    let state = use_reducer(AppState::default);
+    let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
     let on_create = Callback::from(move |cred: PublicKeyCredential| {
         state.dispatch(AppAction::Add(cred));
