@@ -17,7 +17,7 @@ pub fn CredentialsList(props: &Props) -> Html {
             <ul>
                 {props.credentials.iter().map(|cred| {
                     html! {
-                        <li>{ cred.id() }</li>
+                        <li key={cred.id()}>{ cred.id() }</li>
                     }
                 }).collect::<Html>()}
             </ul>
