@@ -1,15 +1,16 @@
-use crate::data::CredentialId;
 use std::rc::Rc;
-use web_sys::PublicKeyCredential;
 use yew::function_component;
 use yew::html;
 use yew::Callback;
 use yew::Html;
 use yew::Properties;
 
+use crate::data::Credential;
+use crate::data::CredentialId;
+
 #[derive(PartialEq, Properties)]
 pub struct Props {
-    pub credentials: Rc<Vec<PublicKeyCredential>>,
+    pub credentials: Rc<Vec<Credential>>,
     pub on_delete: Callback<CredentialId>,
 }
 
@@ -20,14 +21,14 @@ pub fn CredentialsList(props: &Props) -> Html {
         .iter()
         .map(|cred| {
             let on_delete = props.on_delete.clone();
-            let cred_raw_id = cred.raw_id();
+            let cred_raw_id = cred.id.clone();
             let delete = move |_| {
-                on_delete.emit(CredentialId(cred_raw_id.clone()));
+                on_delete.emit(cred_raw_id.clone());
             };
 
             html! {
-                <li key={cred.id()}>
-                    { cred.id() }
+                <li key={&cred.id}>
+                    { &cred.id.b64 }
                     <button onclick={delete}>{ "Delete" }</button>
                 </li>
             }
