@@ -1,15 +1,8 @@
 use js_sys::ArrayBuffer;
-use std::fmt::Display;
 use web_sys::PublicKeyCredential;
 
 #[derive(Clone, PartialEq)]
-pub struct Base64Url(String);
-
-impl Display for Base64Url {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.0.fmt(f)
-    }
-}
+pub struct Base64Url(pub String);
 
 #[derive(Clone, PartialEq)]
 pub struct CredentialId {
@@ -23,9 +16,16 @@ impl From<&CredentialId> for yew::virtual_dom::Key {
     }
 }
 
+impl From<CredentialId> for yew::virtual_dom::Key {
+    fn from(val: CredentialId) -> Self {
+        (val.b64.0.as_str()).into()
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub struct Credential {
     pub id: CredentialId,
+    pub nickname: Option<String>,
 }
 
 impl From<PublicKeyCredential> for Credential {
@@ -35,6 +35,7 @@ impl From<PublicKeyCredential> for Credential {
                 raw: cred.raw_id(),
                 b64: Base64Url(cred.id()),
             },
+            nickname: None,
         }
     }
 }

@@ -24,6 +24,7 @@ enum AppAction {
     Delete(CredentialId),
     SetError(String),
     ClearError,
+    Rename(CredentialId, String),
 }
 
 impl Reducible for AppState {
@@ -48,6 +49,17 @@ impl Reducible for AppState {
 
             Self::Action::ClearError => {
                 Rc::make_mut(&mut self).error = None;
+                self
+            }
+
+            Self::Action::Rename(cred_id, name) => {
+                for cred in Rc::make_mut(&mut Rc::make_mut(&mut self).credentials) {
+                    if cred.id == cred_id {
+                        cred.nickname = if name.is_empty() { None } else { Some(name) };
+                        break;
+                    }
+                }
+
                 self
             }
         }
@@ -87,6 +99,13 @@ pub fn App() -> Html {
         })
     };
 
+    let on_rename = {
+        let state = state.clone();
+        Callback::from(move |(cred_id, name)| {
+            state.dispatch(AppAction::Rename(cred_id, name));
+        })
+    };
+
     html! {
         <>
             <div>
@@ -102,7 +121,7 @@ pub fn App() -> Html {
                     on_fail={on_set_error}
                 />
                 { state.error.as_ref() }
-                <CredentialsList {credentials} {on_delete} />
+                <CredentialsList {credentials} {on_delete} {on_rename} />
             </div>
         </>
     }
