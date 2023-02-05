@@ -72,9 +72,15 @@ pub fn CredentialItem(props: &CredentialItemProps) -> Html {
             }
         };
 
+        let name = props
+            .credential
+            .nickname
+            .clone()
+            .unwrap_or(props.credential.id.b64_abbrev(24));
+
         html! {
             <li>
-                { props.credential.nickname.as_ref().unwrap_or(&props.credential.id.b64.0) }
+                { name }
                 <button onclick={move |_| editing.set(true)}>{ "Rename" }</button>
                 <button onclick={on_delete}>{ "Delete" }</button>
             </li>
