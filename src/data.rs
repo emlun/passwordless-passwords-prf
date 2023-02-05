@@ -10,6 +10,16 @@ pub struct CredentialId {
     pub b64: Base64Url,
 }
 
+impl CredentialId {
+    pub fn b64_abbrev(&self, max_len: usize) -> String {
+        if self.b64.0.len() <= max_len {
+            self.b64.0.clone()
+        } else {
+            format!("{}…", &self.b64.0[0..max_len])
+        }
+    }
+}
+
 impl From<&CredentialId> for yew::virtual_dom::Key {
     fn from(val: &CredentialId) -> Self {
         (val.b64.0.as_str()).into()
