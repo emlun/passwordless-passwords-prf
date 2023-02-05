@@ -10,11 +10,12 @@ use yew::Reducible;
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
 use crate::components::get_button::GetButton;
+use crate::data::Credential;
 use crate::data::CredentialId;
 
 #[derive(Clone, Default, PartialEq)]
 struct AppState {
-    credentials: Rc<Vec<PublicKeyCredential>>,
+    credentials: Rc<Vec<Credential>>,
     error: Option<String>,
 }
 
@@ -31,13 +32,12 @@ impl Reducible for AppState {
     fn reduce(mut self: Rc<Self>, action: Self::Action) -> Rc<Self> {
         match action {
             Self::Action::Add(cred) => {
-                Rc::make_mut(&mut Rc::make_mut(&mut self).credentials).push(cred);
+                Rc::make_mut(&mut Rc::make_mut(&mut self).credentials).push(cred.into());
                 self
             }
 
-            Self::Action::Delete(CredentialId(cred_id)) => {
-                Rc::make_mut(&mut Rc::make_mut(&mut self).credentials)
-                    .retain(|c| c.raw_id() != cred_id);
+            Self::Action::Delete(cred_id) => {
+                Rc::make_mut(&mut Rc::make_mut(&mut self).credentials).retain(|c| c.id != cred_id);
                 self
             }
 

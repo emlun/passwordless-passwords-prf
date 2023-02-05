@@ -8,7 +8,6 @@ use wasm_bindgen::JsValue;
 use web_sys::console;
 use web_sys::CredentialRequestOptions;
 use web_sys::DomException;
-use web_sys::PublicKeyCredential;
 use web_sys::PublicKeyCredentialDescriptor;
 use web_sys::PublicKeyCredentialRequestOptions;
 use web_sys::PublicKeyCredentialType;
@@ -17,6 +16,8 @@ use yew::html;
 use yew::Callback;
 use yew::Html;
 use yew::Properties;
+
+use crate::data::Credential;
 
 fn webauthn_get(ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
     web_sys::window()
@@ -44,12 +45,16 @@ fn webauthn_get(ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
 pub struct Props {
     pub on_begin: Callback<()>,
     pub on_fail: Callback<String>,
-    pub credentials: Rc<Vec<PublicKeyCredential>>,
+    pub credentials: Rc<Vec<Credential>>,
 }
 
 #[function_component]
 pub fn GetButton(props: &Props) -> Html {
-    let credids: Vec<ArrayBuffer> = props.credentials.iter().map(|cred| cred.raw_id()).collect();
+    let credids: Vec<ArrayBuffer> = props
+        .credentials
+        .iter()
+        .map(|cred| cred.id.raw.clone())
+        .collect();
     let credids_empty = credids.is_empty();
 
     let onclick = {

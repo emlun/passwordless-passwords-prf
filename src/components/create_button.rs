@@ -21,6 +21,8 @@ use yew::Callback;
 use yew::Html;
 use yew::Properties;
 
+use crate::data::Credential;
+
 fn webauthn_create(credential_ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
     web_sys::window()
         .unwrap()
@@ -61,7 +63,7 @@ pub struct Props {
     pub on_begin: Callback<()>,
     pub on_create: Callback<PublicKeyCredential>,
     pub on_fail: Callback<String>,
-    pub credentials: Rc<Vec<PublicKeyCredential>>,
+    pub credentials: Rc<Vec<Credential>>,
 }
 
 #[function_component]
@@ -71,8 +73,11 @@ pub fn CreateButton(props: &Props) -> Html {
         let on_create = props.on_create.clone();
         let on_fail = props.on_fail.clone();
 
-        let cred_ids: Vec<ArrayBuffer> =
-            props.credentials.iter().map(|cred| cred.raw_id()).collect();
+        let cred_ids: Vec<ArrayBuffer> = props
+            .credentials
+            .iter()
+            .map(|cred| cred.id.raw.clone())
+            .collect();
 
         let cb = Closure::new(move |cred: JsValue| {
             console::log_1(&cred);
