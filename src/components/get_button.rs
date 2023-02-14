@@ -88,7 +88,7 @@ pub fn GetButton(props: &Props) -> Html {
 
         move |_| {
             if let Ok(prom) = webauthn_get(&credids) {
-                prom.then(&cb).catch(&fail_cb);
+                let _ = prom.then(&cb).catch(&fail_cb);
             } else {
                 console::error_1(&"WebAuthn failed".into());
             }
