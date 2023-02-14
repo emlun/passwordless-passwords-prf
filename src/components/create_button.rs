@@ -103,7 +103,7 @@ pub fn CreateButton(props: &Props) -> Html {
 
         move |_| {
             if let Ok(prom) = webauthn_create(&cred_ids) {
-                prom.then(&cb).catch(&fail_cb);
+                let _ = prom.then(&cb).catch(&fail_cb);
             } else {
                 console::error_1(&"WebAuthn failed".into());
             }
