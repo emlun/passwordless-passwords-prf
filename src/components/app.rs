@@ -1,6 +1,6 @@
 use std::rc::Rc;
+use stylist::yew::styled_component;
 use web_sys::PublicKeyCredential;
-use yew::function_component;
 use yew::html;
 use yew::use_reducer_eq;
 use yew::Callback;
@@ -66,7 +66,7 @@ impl Reducible for AppState {
     }
 }
 
-#[function_component]
+#[styled_component]
 pub fn App() -> Html {
     let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
@@ -107,22 +107,54 @@ pub fn App() -> Html {
     };
 
     html! {
-        <>
-            <div>
-                <CreateButton
-                    credentials={Rc::clone(&credentials)}
-                    {on_create}
-                    on_begin={on_clear_error.clone()}
-                    on_fail={on_set_error.clone()}
-                />
-                <GetButton
-                    credentials={Rc::clone(&credentials)}
-                    on_begin={on_clear_error}
-                    on_fail={on_set_error}
-                />
-                { state.error.as_ref() }
-                <CredentialsList {credentials} {on_delete} {on_rename} />
+        <div class={css! {
+            background: ${"#101010"};
+            color: ${"#f1f1f1"};
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            margin: 0;
+            min-height: 100%;
+            min-width: 100%;
+            padding: 0;
+            position: absolute;
+        }}>
+
+            <div class={css! {
+                flex-grow: 1;
+                flex-shrink: 0;
+                margin: 0 auto;
+                padding: ${"2em 10em"};
+            }}>
+                <div>
+                    <CreateButton
+                        credentials={Rc::clone(&credentials)}
+                        {on_create}
+                        on_begin={on_clear_error.clone()}
+                        on_fail={on_set_error.clone()}
+                    />
+                    <GetButton
+                        credentials={Rc::clone(&credentials)}
+                        on_begin={on_clear_error}
+                        on_fail={on_set_error}
+                    />
+                    { state.error.as_ref() }
+                </div>
+                <div>
+                    <CredentialsList {credentials} {on_delete} {on_rename} />
+                </div>
             </div>
-        </>
+
+            <div class={css! {
+                border-top: ${"1px solid #626262"};
+                color: ${"1px solid #626262"};
+                flex-grow: 0;
+                flex-shrink: 0;
+                padding: ${"1em 10em"};
+                text-align: center;
+            }}>
+                {"Footer"}
+            </div>
+        </div>
     }
 }
