@@ -176,7 +176,6 @@ pub fn App() -> Html {
                         let next_callback = next_callback.clone();
                         let state = state.clone();
                         Closure::new(move |key: JsValue| {
-                            console::log_1(&key);
                             next_callback.set(None);
                             state.set(ProcedureState::VaultPubkeyImported(key.into()));
                         })
@@ -201,13 +200,10 @@ pub fn App() -> Html {
                         let next_callback = next_callback.clone();
                         let state = state.clone();
 
-                        Closure::new(move |cred| {
-                            console::log_1(&cred);
+                        Closure::new(move |cred: JsValue| {
                             let cred: PublicKeyCredential = cred.dyn_into().unwrap();
-
                             let extensions: Object =
                                 cred.get_client_extension_results().dyn_into().unwrap();
-                            console::log_1(&extensions);
                             let prf_result_first = Base64::try_from(Uint8Array::new(
                                 &Reflect::get(
                                     &Reflect::get(
@@ -256,12 +252,7 @@ pub fn App() -> Html {
                     .to_vec()
                     .unwrap();
 
-                    console::log_2(
-                        &"pki".into(),
-                        &Uint8Array::from(pki_vec.as_slice()).to_string(),
-                    );
-
-                    let prom = subtle
+                    let _ = subtle
                         .import_key_with_object(
                             "pkcs8",
                             &Uint8Array::from(pki_vec.as_slice()),
@@ -271,15 +262,12 @@ pub fn App() -> Html {
                         )
                         .unwrap()
                         .then(callback);
-
-                    console::log_2(&"promise".into(), &prom);
                 } else {
                     next_callback.set(Some({
                         let next_callback = next_callback.clone();
                         let state = state.clone();
                         let cred_id = cred_id.clone();
-                        Closure::new(move |key| {
-                            console::log_2(&"imported pkcs8".into(), &key);
+                        Closure::new(move |key: JsValue| {
                             next_callback.set(None);
                             state.set(ProcedureState::AuthenticatorKeyDerived {
                                 cred_id: cred_id.clone(),
@@ -316,8 +304,7 @@ pub fn App() -> Html {
                         let state = state.clone();
                         let cred_id = cred_id.clone();
                         let authnr_private_key = authnr_private_key.clone();
-                        Closure::new(move |key| {
-                            console::log_2(&"imported file exchange key".into(), &key);
+                        Closure::new(move |key: JsValue| {
                             next_callback.set(None);
                             state.set(ProcedureState::FileExchangeKeyImported {
                                 cred_id: cred_id.clone(),
@@ -392,7 +379,6 @@ pub fn App() -> Html {
                         let state = state.clone();
                         let cred_id = cred_id.clone();
                         Closure::new(move |key: JsValue| {
-                            console::log_2(&"derived wrapping key".into(), &key);
                             next_callback.set(None);
                             state.set(ProcedureState::FileWrappingKeyDerived {
                                 cred_id: cred_id.clone(),
@@ -413,7 +399,6 @@ pub fn App() -> Html {
                     let password_key_encrypted =
                         Uint8Array::try_from(vault_foo.keys.get(cred_id).unwrap().password_key())
                             .unwrap();
-                    console::log_2(&"start unwrap password key".into(), &password_key_encrypted);
 
                     let _ = subtle
                         .unwrap_key_with_buffer_source_and_str_and_str(
@@ -443,7 +428,6 @@ pub fn App() -> Html {
 
             ProcedureState::FilePasswordKeyUnwrapped { file_password_key } => {
                 console::log_2(&"FilePasswordKeyUnwrapped".into(), file_password_key);
-                console::log_1(&vault_foo.content.0.len().into());
 
                 if let Some(callback) = &*next_callback {
                     let _ = subtle
