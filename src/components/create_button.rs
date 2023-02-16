@@ -12,7 +12,6 @@ use web_sys::PublicKeyCredential;
 use web_sys::PublicKeyCredentialCreationOptions;
 use web_sys::PublicKeyCredentialDescriptor;
 use web_sys::PublicKeyCredentialParameters;
-use web_sys::PublicKeyCredentialRpEntity;
 use web_sys::PublicKeyCredentialType;
 use web_sys::PublicKeyCredentialUserEntity;
 use yew::function_component;
@@ -36,8 +35,7 @@ fn webauthn_create(credential_ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
                         -7,
                         PublicKeyCredentialType::PublicKey,
                     )),
-                    PublicKeyCredentialRpEntity::new("Example app")
-                        .id("tla.app.k8s.dev.yubico.org"),
+                    &crate::config::webauthn::rp_entity(),
                     &PublicKeyCredentialUserEntity::new(
                         "user@example.org",
                         "Example user",
