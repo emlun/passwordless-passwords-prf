@@ -1,7 +1,6 @@
 use js_sys::Array;
 use js_sys::ArrayBuffer;
 use js_sys::Object;
-use js_sys::Promise;
 use js_sys::Reflect;
 use js_sys::Uint8Array;
 use pkcs8::der::AnyRef;
@@ -18,16 +17,11 @@ use wasm_bindgen::JsValue;
 use web_sys::console;
 use web_sys::AesGcmParams;
 use web_sys::AesKeyGenParams;
-use web_sys::AuthenticationExtensionsClientInputs;
-use web_sys::CredentialRequestOptions;
 use web_sys::CryptoKey;
 use web_sys::EcKeyImportParams;
 use web_sys::EcdhKeyDeriveParams;
 use web_sys::HkdfParams;
 use web_sys::PublicKeyCredential;
-use web_sys::PublicKeyCredentialDescriptor;
-use web_sys::PublicKeyCredentialRequestOptions;
-use web_sys::PublicKeyCredentialType;
 use yew::html;
 use yew::use_reducer_eq;
 use yew::use_state;
@@ -38,12 +32,13 @@ use yew::Reducible;
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
 use crate::components::get_button::GetButton;
-use crate::data::vault::FidoCredential;
 use crate::data::vault::PasswordFile;
 use crate::data::vault::UserConfig;
 use crate::data::Base64;
 use crate::data::Credential;
 use crate::data::CredentialId;
+use crate::webauthn::prf_extension;
+use crate::webauthn::webauthn_get;
 
 #[derive(Clone, Default, PartialEq)]
 struct AppState {
@@ -197,53 +192,14 @@ pub fn App() -> Html {
                 console::log_1(&"VaultPubkeyImported".into());
 
                 if let Some(callback) = &*next_callback {
-                    fn webauthn_get(cred: &FidoCredential) -> Result<Promise, JsValue> {
-                        web_sys::window()
+                    let _ = webauthn_get(
+                        &[Uint8Array::try_from(&vault_config.fido_credentials[0].id)
                             .unwrap()
-                            .navigator()
-                            .credentials()
-                            .get_with_options(
-                                CredentialRequestOptions::new().public_key(
-                                    PublicKeyCredentialRequestOptions::new(&Uint8Array::from(
-                                        [0, 1, 2, 3].as_slice(),
-                                    ))
-                                    .rp_id(crate::config::webauthn::rp_id())
-                                    .allow_credentials(&Array::of1(
-                                        &PublicKeyCredentialDescriptor::new(
-                                            &Uint8Array::try_from(&cred.id).unwrap(),
-                                            PublicKeyCredentialType::PublicKey,
-                                        ),
-                                    ))
-                                    .extensions(
-                                        &AuthenticationExtensionsClientInputs::from(
-                                            Object::from_entries(&Array::of1(&Array::of2(
-                                                &"prf".into(),
-                                                &Object::from_entries(&Array::of1(&Array::of2(
-                                                    &"eval".into(),
-                                                    &Object::from_entries(&Array::of1(
-                                                        &Array::of2(
-                                                            &"first".into(),
-                                                            &Uint8Array::try_from(&cred.prf_salt)
-                                                                .unwrap()
-                                                                .buffer(),
-                                                        ),
-                                                    ))
-                                                    .unwrap(),
-                                                )))
-                                                .unwrap(),
-                                            )))
-                                            .unwrap()
-                                            .dyn_into::<JsValue>()
-                                            .unwrap(),
-                                        ),
-                                    ),
-                                ),
-                            )
-                    }
-
-                    let _ = webauthn_get(&vault_config.fido_credentials[0])
-                        .unwrap()
-                        .then(callback);
+                            .buffer()],
+                        Some(prf_extension(&vault_config.fido_credentials[0])),
+                    )
+                    .unwrap()
+                    .then(callback);
                 } else {
                     next_callback.set(Some({
                         let next_callback = next_callback.clone();

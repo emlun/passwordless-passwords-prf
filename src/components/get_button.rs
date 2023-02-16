@@ -1,16 +1,9 @@
-use js_sys::Array;
 use js_sys::ArrayBuffer;
-use js_sys::Promise;
-use js_sys::Uint8Array;
 use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsValue;
 use web_sys::console;
-use web_sys::CredentialRequestOptions;
 use web_sys::DomException;
-use web_sys::PublicKeyCredentialDescriptor;
-use web_sys::PublicKeyCredentialRequestOptions;
-use web_sys::PublicKeyCredentialType;
 use yew::function_component;
 use yew::html;
 use yew::Callback;
@@ -18,29 +11,7 @@ use yew::Html;
 use yew::Properties;
 
 use crate::data::Credential;
-
-fn webauthn_get(ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
-    web_sys::window()
-        .unwrap()
-        .navigator()
-        .credentials()
-        .get_with_options(
-            CredentialRequestOptions::new().public_key(
-                PublicKeyCredentialRequestOptions::new(&Uint8Array::from([0, 1, 2, 3].as_slice()))
-                    .rp_id(crate::config::webauthn::rp_id())
-                    .allow_credentials(
-                        &ids.iter()
-                            .map(|id| {
-                                PublicKeyCredentialDescriptor::new(
-                                    id,
-                                    PublicKeyCredentialType::PublicKey,
-                                )
-                            })
-                            .collect::<Array>(),
-                    ),
-            ),
-        )
-}
+use crate::webauthn::webauthn_get;
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
@@ -88,7 +59,7 @@ pub fn GetButton(props: &Props) -> Html {
         });
 
         move |_| {
-            if let Ok(prom) = webauthn_get(&credids) {
+            if let Ok(prom) = webauthn_get(&credids, None) {
                 let _ = prom.then(&cb).catch(&fail_cb);
             } else {
                 console::error_1(&"WebAuthn failed".into());
