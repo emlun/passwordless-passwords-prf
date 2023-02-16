@@ -1,8 +1,36 @@
+use js_sys::Array;
+use js_sys::ArrayBuffer;
+use js_sys::Object;
+use js_sys::Promise;
+use js_sys::Reflect;
+use js_sys::Uint8Array;
+use pkcs8::der::AnyRef;
+use pkcs8::der::Encode;
+use pkcs8::AlgorithmIdentifier;
+use pkcs8::ObjectIdentifier;
+use pkcs8::PrivateKeyInfo;
+use sec1::EcPrivateKey;
 use std::rc::Rc;
 use stylist::yew::styled_component;
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::JsValue;
+use web_sys::console;
+use web_sys::AesGcmParams;
+use web_sys::AesKeyGenParams;
+use web_sys::AuthenticationExtensionsClientInputs;
+use web_sys::CredentialRequestOptions;
+use web_sys::CryptoKey;
+use web_sys::EcKeyImportParams;
+use web_sys::EcdhKeyDeriveParams;
+use web_sys::HkdfParams;
 use web_sys::PublicKeyCredential;
+use web_sys::PublicKeyCredentialDescriptor;
+use web_sys::PublicKeyCredentialRequestOptions;
+use web_sys::PublicKeyCredentialType;
 use yew::html;
 use yew::use_reducer_eq;
+use yew::use_state;
 use yew::Callback;
 use yew::Html;
 use yew::Reducible;
@@ -10,6 +38,10 @@ use yew::Reducible;
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
 use crate::components::get_button::GetButton;
+use crate::data::vault::FidoCredential;
+use crate::data::vault::PasswordFile;
+use crate::data::vault::UserConfig;
+use crate::data::Base64;
 use crate::data::Credential;
 use crate::data::CredentialId;
 
@@ -70,6 +102,461 @@ impl Reducible for AppState {
 pub fn App() -> Html {
     let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
+
+    let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
+
+    let vault_config: UserConfig = serde_json::from_str(
+        &local_storage
+            .get_item("cli_vault-user.json")
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+
+    let vault_foo: PasswordFile = serde_json::from_str(
+        &local_storage
+            .get_item("cli_vault/foo.vlt")
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+
+    enum ProcedureState {
+        Init,
+        VaultPubkeyImported(CryptoKey),
+        PrfEvaluated {
+            cred_id: Base64,
+            prf_output: Vec<u8>,
+        },
+        AuthenticatorKeyDerived {
+            cred_id: Base64,
+            authnr_private_key: CryptoKey,
+        },
+        FileExchangeKeyImported {
+            cred_id: Base64,
+            authnr_private_key: CryptoKey,
+            file_exchange_key: CryptoKey,
+        },
+        FileWrappingHkdfInputDerived {
+            cred_id: Base64,
+            file_wrapping_hkdf_input: ArrayBuffer,
+        },
+        FileWrappingHkdfInputImported {
+            cred_id: Base64,
+            file_wrapping_hkdf_input: CryptoKey,
+        },
+        FileWrappingKeyDerived {
+            cred_id: Base64,
+            file_wrapping_key: CryptoKey,
+        },
+        FilePasswordKeyUnwrapped {
+            file_password_key: CryptoKey,
+        },
+        PasswordDecrypted {
+            password: ArrayBuffer,
+        },
+    }
+
+    let procedure_state = use_state(|| ProcedureState::Init);
+
+    {
+        let subtle = web_sys::window().unwrap().crypto().unwrap().subtle();
+        let state = procedure_state.clone();
+        let next_callback = use_state(|| None);
+
+        match &*state {
+            ProcedureState::Init => {
+                console::log_1(&"Init".into());
+
+                if let Some(callback) = &*next_callback {
+                    let _ = subtle
+                        .import_key_with_object(
+                            "spki",
+                            &Uint8Array::try_from(&vault_config.fido_credentials[0].public_key)
+                                .unwrap(),
+                            EcKeyImportParams::new("ECDH").named_curve("P-256"),
+                            false,
+                            &Array::new(),
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        Closure::new(move |key: JsValue| {
+                            console::log_1(&key);
+                            next_callback.set(None);
+                            state.set(ProcedureState::VaultPubkeyImported(key.into()));
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::VaultPubkeyImported(..) => {
+                console::log_1(&"VaultPubkeyImported".into());
+
+                if let Some(callback) = &*next_callback {
+                    fn webauthn_get(cred: &FidoCredential) -> Result<Promise, JsValue> {
+                        web_sys::window()
+                            .unwrap()
+                            .navigator()
+                            .credentials()
+                            .get_with_options(
+                                CredentialRequestOptions::new().public_key(
+                                    PublicKeyCredentialRequestOptions::new(&Uint8Array::from(
+                                        [0, 1, 2, 3].as_slice(),
+                                    ))
+                                    .allow_credentials(&Array::of1(
+                                        &PublicKeyCredentialDescriptor::new(
+                                            &Uint8Array::try_from(&cred.id).unwrap(),
+                                            PublicKeyCredentialType::PublicKey,
+                                        ),
+                                    ))
+                                    .extensions(
+                                        &AuthenticationExtensionsClientInputs::from(
+                                            Object::from_entries(&Array::of1(&Array::of2(
+                                                &"prf".into(),
+                                                &Object::from_entries(&Array::of1(&Array::of2(
+                                                    &"eval".into(),
+                                                    &Object::from_entries(&Array::of1(
+                                                        &Array::of2(
+                                                            &"first".into(),
+                                                            &Uint8Array::try_from(&cred.prf_salt)
+                                                                .unwrap()
+                                                                .buffer(),
+                                                        ),
+                                                    ))
+                                                    .unwrap(),
+                                                )))
+                                                .unwrap(),
+                                            )))
+                                            .unwrap()
+                                            .dyn_into::<JsValue>()
+                                            .unwrap(),
+                                        ),
+                                    ),
+                                ),
+                            )
+                    }
+
+                    let _ = webauthn_get(&vault_config.fido_credentials[0])
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+
+                        Closure::new(move |cred| {
+                            console::log_1(&cred);
+                            let cred: PublicKeyCredential = cred.dyn_into().unwrap();
+
+                            let extensions: Object =
+                                cred.get_client_extension_results().dyn_into().unwrap();
+                            console::log_1(&extensions);
+                            let prf_result_first = Base64::try_from(Uint8Array::new(
+                                &Reflect::get(
+                                    &Reflect::get(
+                                        &Reflect::get(&extensions, &"prf".into()).unwrap(),
+                                        &"results".into(),
+                                    )
+                                    .unwrap(),
+                                    &"first".into(),
+                                )
+                                .unwrap(),
+                            ))
+                            .unwrap()
+                            .0;
+
+                            next_callback.set(None);
+                            state.set(ProcedureState::PrfEvaluated {
+                                cred_id: Base64::try_from(cred.raw_id()).unwrap(),
+                                prf_output: prf_result_first,
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::PrfEvaluated {
+                cred_id,
+                prf_output,
+            } => {
+                console::log_1(&"PrfEvaluated".into());
+                if let Some(callback) = &*next_callback {
+                    let ecdh: ObjectIdentifier = "1.2.840.10045.2.1".parse().unwrap();
+                    let named_curve_p256: ObjectIdentifier = "1.2.840.10045.3.1.7".parse().unwrap();
+                    let pki_vec = PrivateKeyInfo::new(
+                        AlgorithmIdentifier {
+                            oid: ecdh,
+                            parameters: Some(AnyRef::from(&named_curve_p256)),
+                        },
+                        &EcPrivateKey {
+                            private_key: prf_output,
+                            parameters: None,
+                            public_key: None,
+                        }
+                        .to_vec()
+                        .unwrap(),
+                    )
+                    .to_vec()
+                    .unwrap();
+
+                    console::log_2(
+                        &"pki".into(),
+                        &Uint8Array::from(pki_vec.as_slice()).to_string(),
+                    );
+
+                    let prom = subtle
+                        .import_key_with_object(
+                            "pkcs8",
+                            &Uint8Array::from(pki_vec.as_slice()),
+                            EcKeyImportParams::new("ECDH").named_curve("P-256"),
+                            false,
+                            &Array::of1(&"deriveBits".into()),
+                        )
+                        .unwrap()
+                        .then(callback);
+
+                    console::log_2(&"promise".into(), &prom);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        let cred_id = cred_id.clone();
+                        Closure::new(move |key| {
+                            console::log_2(&"imported pkcs8".into(), &key);
+                            next_callback.set(None);
+                            state.set(ProcedureState::AuthenticatorKeyDerived {
+                                cred_id: cred_id.clone(),
+                                authnr_private_key: key.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::AuthenticatorKeyDerived {
+                cred_id,
+                authnr_private_key,
+            } => {
+                console::log_2(&"AuthenticatorKeyDerived".into(), authnr_private_key);
+
+                if let Some(callback) = &*next_callback {
+                    let _ = subtle
+                        .import_key_with_object(
+                            "spki",
+                            &Uint8Array::try_from(
+                                vault_foo.keys.get(cred_id).unwrap().exchange_pubkey(),
+                            )
+                            .unwrap(),
+                            EcKeyImportParams::new("ECDH").named_curve("P-256"),
+                            false,
+                            &Array::new(),
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        let cred_id = cred_id.clone();
+                        let authnr_private_key = authnr_private_key.clone();
+                        Closure::new(move |key| {
+                            console::log_2(&"imported file exchange key".into(), &key);
+                            next_callback.set(None);
+                            state.set(ProcedureState::FileExchangeKeyImported {
+                                cred_id: cred_id.clone(),
+                                authnr_private_key: authnr_private_key.clone(),
+                                file_exchange_key: key.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::FileExchangeKeyImported {
+                cred_id,
+                authnr_private_key,
+                file_exchange_key,
+            } => {
+                console::log_1(&"FileExchangeKeyImported".into());
+
+                if let Some(callback) = &*next_callback {
+                    let _ = subtle
+                        .derive_bits_with_object(
+                            &EcdhKeyDeriveParams::new("ECDH", file_exchange_key),
+                            authnr_private_key,
+                            32 * 8,
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        let cred_id = cred_id.clone();
+                        Closure::new(move |key: JsValue| {
+                            next_callback.set(None);
+                            state.set(ProcedureState::FileWrappingHkdfInputDerived {
+                                cred_id: cred_id.clone(),
+                                file_wrapping_hkdf_input: key.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::FileWrappingHkdfInputDerived {
+                cred_id,
+                file_wrapping_hkdf_input,
+            } => {
+                console::log_2(
+                    &"FileWrappingHkdfInputDerived".into(),
+                    &Uint8Array::new(file_wrapping_hkdf_input),
+                );
+
+                if let Some(callback) = &*next_callback {
+                    let _ = subtle
+                        .import_key_with_str(
+                            "raw",
+                            file_wrapping_hkdf_input,
+                            "HKDF",
+                            false,
+                            &Array::of1(&"deriveKey".into()),
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        let cred_id = cred_id.clone();
+                        Closure::new(move |key: JsValue| {
+                            next_callback.set(None);
+                            state.set(ProcedureState::FileWrappingHkdfInputImported {
+                                cred_id: cred_id.clone(),
+                                file_wrapping_hkdf_input: key.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::FileWrappingHkdfInputImported {
+                cred_id,
+                file_wrapping_hkdf_input,
+            } => {
+                console::log_1(&"FileWrappingHkdfInputImported".into());
+
+                if let Some(callback) = &*next_callback {
+                    let _ = subtle
+                        .derive_key_with_object_and_object(
+                            &HkdfParams::new(
+                                "HKDF",
+                                &"SHA-256".into(),
+                                &Uint8Array::from("foo".as_bytes()),
+                                &Uint8Array::try_from(vault_foo.keys.get(cred_id).unwrap().salt())
+                                    .unwrap(),
+                            ),
+                            file_wrapping_hkdf_input,
+                            &AesKeyGenParams::new("AES-KW", 128),
+                            false,
+                            &Array::of2(&"wrapKey".into(), &"unwrapKey".into()),
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        let cred_id = cred_id.clone();
+                        Closure::new(move |key: JsValue| {
+                            console::log_2(&"derived wrapping key".into(), &key);
+                            next_callback.set(None);
+                            state.set(ProcedureState::FileWrappingKeyDerived {
+                                cred_id: cred_id.clone(),
+                                file_wrapping_key: key.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::FileWrappingKeyDerived {
+                cred_id,
+                file_wrapping_key,
+            } => {
+                console::log_2(&"FileWrappingKeyDerived".into(), file_wrapping_key);
+
+                if let Some(callback) = &*next_callback {
+                    let password_key_encrypted =
+                        Uint8Array::try_from(vault_foo.keys.get(cred_id).unwrap().password_key())
+                            .unwrap();
+                    console::log_2(&"start unwrap password key".into(), &password_key_encrypted);
+
+                    let _ = subtle
+                        .unwrap_key_with_buffer_source_and_str_and_str(
+                            "raw",
+                            &password_key_encrypted.buffer(),
+                            file_wrapping_key,
+                            "AES-KW",
+                            "AES-GCM",
+                            false,
+                            &Array::of2(&"encrypt".into(), &"decrypt".into()),
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        Closure::new(move |key: JsValue| {
+                            next_callback.set(None);
+                            state.set(ProcedureState::FilePasswordKeyUnwrapped {
+                                file_password_key: key.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::FilePasswordKeyUnwrapped { file_password_key } => {
+                console::log_2(&"FilePasswordKeyUnwrapped".into(), file_password_key);
+                console::log_1(&vault_foo.content.0.len().into());
+
+                if let Some(callback) = &*next_callback {
+                    let _ = subtle
+                        .decrypt_with_object_and_buffer_source(
+                            &AesGcmParams::new(
+                                "AES-GCM",
+                                &Uint8Array::try_from(&vault_foo.iv).unwrap(),
+                            ),
+                            file_password_key,
+                            &Uint8Array::try_from(&vault_foo.content).unwrap(),
+                        )
+                        .unwrap()
+                        .then(callback);
+                } else {
+                    next_callback.set(Some({
+                        let next_callback = next_callback.clone();
+                        let state = state.clone();
+                        Closure::new(move |output: JsValue| {
+                            next_callback.set(None);
+                            state.set(ProcedureState::PasswordDecrypted {
+                                password: output.into(),
+                            });
+                        })
+                    }));
+                }
+            }
+
+            ProcedureState::PasswordDecrypted { password } => {
+                console::log_2(&"PasswordDecrypted".into(), password);
+            }
+        }
+    }
 
     let on_clear_error = {
         let state = state.clone();
@@ -142,6 +629,25 @@ pub fn App() -> Html {
                 </div>
                 <div>
                     <CredentialsList {credentials} {on_delete} {on_rename} />
+                </div>
+
+                <div>
+                    {
+                        if let ProcedureState::PasswordDecrypted { password  } = &*procedure_state {
+                            html! {
+                                <>
+                                { "Decrypted password:" }
+                                <pre>
+                                { String::from_utf8(Uint8Array::new(password).to_vec()).unwrap() }
+                                </pre>
+                                    </>
+                            }
+                        } else {
+                            html! {
+                                <></>
+                            }
+                        }
+                    }
                 </div>
             </div>
 
