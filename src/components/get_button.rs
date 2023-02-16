@@ -27,6 +27,7 @@ fn webauthn_get(ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
         .get_with_options(
             CredentialRequestOptions::new().public_key(
                 PublicKeyCredentialRequestOptions::new(&Uint8Array::from([0, 1, 2, 3].as_slice()))
+                    .rp_id("tla.app.k8s.dev.yubico.org")
                     .allow_credentials(
                         &ids.iter()
                             .map(|id| {

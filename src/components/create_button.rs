@@ -36,7 +36,8 @@ fn webauthn_create(credential_ids: &[ArrayBuffer]) -> Result<Promise, JsValue> {
                         -7,
                         PublicKeyCredentialType::PublicKey,
                     )),
-                    PublicKeyCredentialRpEntity::new("Example app").id("localhost"),
+                    PublicKeyCredentialRpEntity::new("Example app")
+                        .id("tla.app.k8s.dev.yubico.org"),
                     &PublicKeyCredentialUserEntity::new(
                         "user@example.org",
                         "Example user",
