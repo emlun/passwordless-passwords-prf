@@ -132,10 +132,6 @@ pub fn App() -> Html {
             authnr_private_key: CryptoKey,
             file_exchange_key: CryptoKey,
         },
-        FileWrappingHkdfInputDerived {
-            cred_id: Base64,
-            file_wrapping_hkdf_input: ArrayBuffer,
-        },
         FileWrappingHkdfInputImported {
             cred_id: Base64,
             file_wrapping_hkdf_input: CryptoKey,
@@ -271,7 +267,7 @@ pub fn App() -> Html {
                             &Uint8Array::from(pki_vec.as_slice()),
                             EcKeyImportParams::new("ECDH").named_curve("P-256"),
                             false,
-                            &Array::of1(&"deriveBits".into()),
+                            &Array::of1(&"deriveKey".into()),
                         )
                         .unwrap()
                         .then(callback);
@@ -342,43 +338,9 @@ pub fn App() -> Html {
 
                 if let Some(callback) = &*next_callback {
                     let _ = subtle
-                        .derive_bits_with_object(
+                        .derive_key_with_object_and_str(
                             &EcdhKeyDeriveParams::new("ECDH", file_exchange_key),
                             authnr_private_key,
-                            32 * 8,
-                        )
-                        .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        let cred_id = cred_id.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::FileWrappingHkdfInputDerived {
-                                cred_id: cred_id.clone(),
-                                file_wrapping_hkdf_input: key.into(),
-                            });
-                        })
-                    }));
-                }
-            }
-
-            ProcedureState::FileWrappingHkdfInputDerived {
-                cred_id,
-                file_wrapping_hkdf_input,
-            } => {
-                console::log_2(
-                    &"FileWrappingHkdfInputDerived".into(),
-                    &Uint8Array::new(file_wrapping_hkdf_input),
-                );
-
-                if let Some(callback) = &*next_callback {
-                    let _ = subtle
-                        .import_key_with_str(
-                            "raw",
-                            file_wrapping_hkdf_input,
                             "HKDF",
                             false,
                             &Array::of1(&"deriveKey".into()),
