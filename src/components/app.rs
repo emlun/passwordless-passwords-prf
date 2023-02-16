@@ -207,6 +207,7 @@ pub fn App() -> Html {
                                     PublicKeyCredentialRequestOptions::new(&Uint8Array::from(
                                         [0, 1, 2, 3].as_slice(),
                                     ))
+                                    .rp_id("tla.app.k8s.dev.yubico.org")
                                     .allow_credentials(&Array::of1(
                                         &PublicKeyCredentialDescriptor::new(
                                             &Uint8Array::try_from(&cred.id).unwrap(),
