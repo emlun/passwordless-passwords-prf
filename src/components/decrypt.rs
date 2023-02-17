@@ -372,8 +372,8 @@ impl DecryptionProcedureState {
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
-    pub vault_config: UserConfig,
-    pub file_config: PasswordFile,
+    pub vault_config: Rc<UserConfig>,
+    pub file_config: Rc<PasswordFile>,
 }
 
 #[styled_component]

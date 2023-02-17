@@ -16,6 +16,7 @@ use crate::data::vault::UserConfig;
 use crate::data::Credential;
 use crate::data::CredentialId;
 use crate::hooks::local_storage::use_local_storage;
+use crate::hooks::local_storage::UseLocalStorageHandle;
 
 #[derive(Clone, Default, PartialEq)]
 struct AppState {
@@ -75,8 +76,10 @@ pub fn App() -> Html {
     let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
 
-    let vault_config: UserConfig = use_local_storage("cli_vault-user.json").unwrap().unwrap();
-    let vault_foo: PasswordFile = use_local_storage("cli_vault/foo.vlt").unwrap().unwrap();
+    let vault_config: UseLocalStorageHandle<UserConfig> =
+        use_local_storage("cli_vault-user.json").unwrap();
+    let vault_foo: UseLocalStorageHandle<PasswordFile> =
+        use_local_storage("cli_vault/foo.vlt").unwrap();
 
     let on_clear_error = {
         let state = state.clone();
@@ -151,7 +154,17 @@ pub fn App() -> Html {
                     <CredentialsList {credentials} {on_delete} {on_rename} />
                 </div>
 
-                <Decrypt {vault_config} file_config={vault_foo} />
+                {
+                    if let Some((vault_config, file_config)) = vault_config.ok().zip(vault_foo.ok()) {
+                        html! {
+                            <Decrypt {vault_config} {file_config} />
+                        }
+                    } else {
+                        html! {
+                            <></>
+                        }
+                    }
+                }
             </div>
 
             <div class={css! {
