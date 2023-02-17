@@ -22,12 +22,14 @@ use web_sys::EcKeyImportParams;
 use web_sys::EcdhKeyDeriveParams;
 use web_sys::HkdfParams;
 use web_sys::PublicKeyCredential;
+use web_sys::SubtleCrypto;
 use yew::html;
 use yew::use_reducer_eq;
 use yew::use_state;
 use yew::Callback;
 use yew::Html;
 use yew::Reducible;
+use yew::UseStateHandle;
 
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
@@ -148,19 +150,25 @@ pub fn App() -> Html {
         },
     }
 
-    let procedure_state = use_state(|| ProcedureState::Init);
+    fn subtle_crypto() -> Result<SubtleCrypto, JsValue> {
+        Ok(web_sys::window()
+            .ok_or(JsValue::UNDEFINED)?
+            .crypto()?
+            .subtle())
+    }
 
-    {
-        let subtle = web_sys::window().unwrap().crypto().unwrap().subtle();
-        let state = procedure_state.clone();
-        let next_callback = use_state(|| None);
+    type ClosureState = Option<Closure<dyn FnMut(JsValue)>>;
 
-        match &*state {
-            ProcedureState::Init => {
-                console::log_1(&"Init".into());
-
-                if let Some(callback) = &*next_callback {
-                    let _ = subtle
+    impl ProcedureState {
+        fn load_vault_pubkey(
+            &self,
+            state: &UseStateHandle<Self>,
+            next_callback: &UseStateHandle<ClosureState>,
+            vault_config: &UserConfig,
+        ) -> Result<(), JsValue> {
+            if let Self::Init = self {
+                if let Some(callback) = &**next_callback {
+                    let _ = subtle_crypto()?
                         .import_key_with_object(
                             "spki",
                             &Uint8Array::try_from(&vault_config.fido_credentials[0].public_key)
@@ -168,8 +176,7 @@ pub fn App() -> Html {
                             EcKeyImportParams::new("ECDH").named_curve("P-256"),
                             false,
                             &Array::new(),
-                        )
-                        .unwrap()
+                        )?
                         .then(callback);
                 } else {
                     next_callback.set(Some({
@@ -181,6 +188,26 @@ pub fn App() -> Html {
                         })
                     }));
                 }
+                Ok(())
+            } else {
+                Err("Invalid state for load_vault_pubkey".into())
+            }
+        }
+    }
+
+    let procedure_state = use_state(|| ProcedureState::Init);
+
+    {
+        let subtle = web_sys::window().unwrap().crypto().unwrap().subtle();
+        let state = procedure_state.clone();
+        let next_callback: UseStateHandle<ClosureState> = use_state(|| None);
+
+        match &*state {
+            ProcedureState::Init => {
+                console::log_1(&"Init".into());
+                if let Err(err) = state.load_vault_pubkey(&state, &next_callback, &vault_config) {
+                    console::error_2(&"Failed to load vault pubkey".into(), &err);
+                };
             }
 
             ProcedureState::VaultPubkeyImported(..) => {
