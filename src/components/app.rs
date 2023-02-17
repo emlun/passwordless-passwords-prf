@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use stylist::yew::styled_component;
+use web_sys::console;
 use web_sys::PublicKeyCredential;
 use yew::html;
 use yew::use_reducer_eq;
@@ -11,6 +12,7 @@ use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
 use crate::components::decrypt::Decrypt;
 use crate::components::get_button::GetButton;
+use crate::components::import::Import;
 use crate::data::vault::PasswordFile;
 use crate::data::vault::UserConfig;
 use crate::data::Credential;
@@ -116,6 +118,24 @@ pub fn App() -> Html {
         })
     };
 
+    let on_import_user_config = {
+        let vault_config = vault_config.clone();
+        Callback::from(move |s: String| {
+            if vault_config.set_from_str(&s).is_err() {
+                console::error_1(&"Import failed".into());
+            }
+        })
+    };
+
+    let on_import_file_config = {
+        let vault_foo = vault_foo.clone();
+        Callback::from(move |s: String| {
+            if vault_foo.set_from_str(&s).is_err() {
+                console::error_1(&"Import failed".into());
+            }
+        })
+    };
+
     html! {
         <div class={css! {
             background: ${"#101010"};
@@ -161,7 +181,10 @@ pub fn App() -> Html {
                         }
                     } else {
                         html! {
-                            <></>
+                            <>
+                                <Import on_import={on_import_user_config} ><h2>{ "Import user config:" }</h2></Import>
+                                <Import on_import={on_import_file_config} ><h2>{ "Import encrypted file:" }</h2></Import>
+                            </>
                         }
                     }
                 }
