@@ -45,9 +45,23 @@ where
     T: Serialize,
     T: DeserializeOwned,
 {
-    storage: Storage,
+    storage: Rc<Storage>,
     name: &'name str,
     state: UseStateHandle<Option<ParseResult<T>>>,
+}
+
+impl<'name, T> Clone for UseLocalStorageHandle<'name, T>
+where
+    T: Serialize,
+    T: DeserializeOwned,
+{
+    fn clone(&self) -> Self {
+        Self {
+            storage: Rc::clone(&self.storage),
+            name: self.name,
+            state: self.state.clone(),
+        }
+    }
 }
 
 impl<'name, T> Deref for UseLocalStorageHandle<'name, T>
@@ -82,6 +96,13 @@ where
         }
         Ok(())
     }
+
+    pub fn set_from_str(&self, value_str: &str) -> Result<(), SetError> {
+        let value = serde_json::from_str(value_str)?;
+        self.storage.set_item(self.name, value_str)?;
+        self.state.set(Some(Ok(Rc::new(value))));
+        Ok(())
+    }
 }
 
 #[hook]
@@ -109,7 +130,7 @@ where
     });
 
     Ok(UseLocalStorageHandle {
-        storage,
+        storage: Rc::new(storage),
         name,
         state,
     })
