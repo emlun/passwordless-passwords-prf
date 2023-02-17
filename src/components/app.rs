@@ -15,6 +15,7 @@ use crate::data::vault::PasswordFile;
 use crate::data::vault::UserConfig;
 use crate::data::Credential;
 use crate::data::CredentialId;
+use crate::hooks::local_storage::use_local_storage;
 
 #[derive(Clone, Default, PartialEq)]
 struct AppState {
@@ -74,23 +75,8 @@ pub fn App() -> Html {
     let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
 
-    let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-
-    let vault_config: UserConfig = serde_json::from_str(
-        &local_storage
-            .get_item("cli_vault-user.json")
-            .unwrap()
-            .unwrap(),
-    )
-    .unwrap();
-
-    let vault_foo: PasswordFile = serde_json::from_str(
-        &local_storage
-            .get_item("cli_vault/foo.vlt")
-            .unwrap()
-            .unwrap(),
-    )
-    .unwrap();
+    let vault_config: UserConfig = use_local_storage("cli_vault-user.json").unwrap().unwrap();
+    let vault_foo: PasswordFile = use_local_storage("cli_vault/foo.vlt").unwrap().unwrap();
 
     let on_clear_error = {
         let state = state.clone();
