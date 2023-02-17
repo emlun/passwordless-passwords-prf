@@ -9,6 +9,8 @@ use pkcs8::AlgorithmIdentifier;
 use pkcs8::ObjectIdentifier;
 use pkcs8::PrivateKeyInfo;
 use sec1::EcPrivateKey;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use stylist::yew::styled_component;
 use wasm_bindgen::closure::Closure;
@@ -24,6 +26,7 @@ use web_sys::HkdfParams;
 use web_sys::PublicKeyCredential;
 use web_sys::SubtleCrypto;
 use yew::html;
+use yew::use_mut_ref;
 use yew::use_reducer_eq;
 use yew::use_state;
 use yew::Callback;
@@ -157,17 +160,34 @@ pub fn App() -> Html {
             .subtle())
     }
 
-    type ClosureState = Option<Closure<dyn FnMut(JsValue)>>;
+    type ClosuresMap<'id> = HashMap<&'id str, Rc<Closure<dyn FnMut(JsValue)>>>;
+    let closure_registry: Rc<RefCell<ClosuresMap>> = use_mut_ref(HashMap::new);
+    console::log_2(
+        &"Closures:".into(),
+        &(closure_registry.borrow().len()).into(),
+    );
+
+    fn new_closure<'id>(
+        closure_registry: &Rc<RefCell<ClosuresMap<'id>>>,
+        id: &'id str,
+        closure: Closure<dyn FnMut(JsValue)>,
+    ) -> Rc<Closure<dyn FnMut(JsValue)>> {
+        let cb = Rc::new(closure);
+        closure_registry.borrow_mut().insert(id, Rc::clone(&cb));
+        cb
+    }
 
     impl ProcedureState {
-        fn load_vault_pubkey(
-            &self,
+        fn advance(
             state: &UseStateHandle<Self>,
-            next_callback: &UseStateHandle<ClosureState>,
+            closure_registry: &Rc<RefCell<ClosuresMap>>,
             vault_config: &UserConfig,
+            file_config: &PasswordFile,
         ) -> Result<(), JsValue> {
-            if let Self::Init = self {
-                if let Some(callback) = &**next_callback {
+            match &**state {
+                Self::Init => {
+                    console::log_1(&"Init".into());
+
                     let _ = subtle_crypto()?
                         .import_key_with_object(
                             "spki",
@@ -177,54 +197,26 @@ pub fn App() -> Html {
                             false,
                             &Array::new(),
                         )?
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::VaultPubkeyImported(key.into()));
-                        })
-                    }));
+                        .then(&new_closure(closure_registry, "cb1", {
+                            let state = state.clone();
+                            Closure::new(move |key: JsValue| {
+                                state.set(Self::VaultPubkeyImported(key.into()));
+                            })
+                        }));
+
+                    Ok(())
                 }
-                Ok(())
-            } else {
-                Err("Invalid state for load_vault_pubkey".into())
-            }
-        }
-    }
 
-    let procedure_state = use_state(|| ProcedureState::Init);
+                Self::VaultPubkeyImported(..) => {
+                    console::log_1(&"VaultPubkeyImported".into());
 
-    {
-        let subtle = web_sys::window().unwrap().crypto().unwrap().subtle();
-        let state = procedure_state.clone();
-        let next_callback: UseStateHandle<ClosureState> = use_state(|| None);
-
-        match &*state {
-            ProcedureState::Init => {
-                console::log_1(&"Init".into());
-                if let Err(err) = state.load_vault_pubkey(&state, &next_callback, &vault_config) {
-                    console::error_2(&"Failed to load vault pubkey".into(), &err);
-                };
-            }
-
-            ProcedureState::VaultPubkeyImported(..) => {
-                console::log_1(&"VaultPubkeyImported".into());
-
-                if let Some(callback) = &*next_callback {
                     let _ = webauthn_get(
                         &[Uint8Array::try_from(&vault_config.fido_credentials[0].id)
                             .unwrap()
                             .buffer()],
                         Some(prf_extension(&vault_config.fido_credentials[0])),
-                    )
-                    .unwrap()
-                    .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
+                    )?
+                    .then(&new_closure(closure_registry, "cb2", {
                         let state = state.clone();
 
                         Closure::new(move |cred: JsValue| {
@@ -245,22 +237,22 @@ pub fn App() -> Html {
                             .unwrap()
                             .0;
 
-                            next_callback.set(None);
-                            state.set(ProcedureState::PrfEvaluated {
+                            state.set(Self::PrfEvaluated {
                                 cred_id: Base64::try_from(cred.raw_id()).unwrap(),
                                 prf_output: prf_result_first,
                             });
                         })
                     }));
-                }
-            }
 
-            ProcedureState::PrfEvaluated {
-                cred_id,
-                prf_output,
-            } => {
-                console::log_1(&"PrfEvaluated".into());
-                if let Some(callback) = &*next_callback {
+                    Ok(())
+                }
+
+                Self::PrfEvaluated {
+                    cred_id,
+                    prf_output,
+                } => {
+                    console::log_1(&"PrfEvaluated".into());
+
                     let ecdh: ObjectIdentifier = "1.2.840.10045.2.1".parse().unwrap();
                     let named_curve_p256: ObjectIdentifier = "1.2.840.10045.3.1.7".parse().unwrap();
                     let pki_vec = PrivateKeyInfo::new(
@@ -279,44 +271,39 @@ pub fn App() -> Html {
                     .to_vec()
                     .unwrap();
 
-                    let _ = subtle
+                    let _ = subtle_crypto()?
                         .import_key_with_object(
                             "pkcs8",
                             &Uint8Array::from(pki_vec.as_slice()),
                             EcKeyImportParams::new("ECDH").named_curve("P-256"),
                             false,
                             &Array::of1(&"deriveKey".into()),
-                        )
-                        .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        let cred_id = cred_id.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::AuthenticatorKeyDerived {
-                                cred_id: cred_id.clone(),
-                                authnr_private_key: key.into(),
-                            });
-                        })
-                    }));
+                        )?
+                        .then(&new_closure(closure_registry, "cb3", {
+                            let state = state.clone();
+                            let cred_id = cred_id.clone();
+                            Closure::new(move |key: JsValue| {
+                                state.set(Self::AuthenticatorKeyDerived {
+                                    cred_id: cred_id.clone(),
+                                    authnr_private_key: key.into(),
+                                });
+                            })
+                        }));
+
+                    Ok(())
                 }
-            }
 
-            ProcedureState::AuthenticatorKeyDerived {
-                cred_id,
-                authnr_private_key,
-            } => {
-                console::log_2(&"AuthenticatorKeyDerived".into(), authnr_private_key);
+                Self::AuthenticatorKeyDerived {
+                    cred_id,
+                    authnr_private_key,
+                } => {
+                    console::log_2(&"AuthenticatorKeyDerived".into(), authnr_private_key);
 
-                if let Some(callback) = &*next_callback {
-                    let _ = subtle
+                    let _ = subtle_crypto()?
                         .import_key_with_object(
                             "spki",
                             &Uint8Array::try_from(
-                                vault_foo.keys.get(cred_id).unwrap().exchange_pubkey(),
+                                file_config.keys.get(cred_id).unwrap().exchange_pubkey(),
                             )
                             .unwrap(),
                             EcKeyImportParams::new("ECDH").named_curve("P-256"),
@@ -324,34 +311,30 @@ pub fn App() -> Html {
                             &Array::new(),
                         )
                         .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        let cred_id = cred_id.clone();
-                        let authnr_private_key = authnr_private_key.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::FileExchangeKeyImported {
-                                cred_id: cred_id.clone(),
-                                authnr_private_key: authnr_private_key.clone(),
-                                file_exchange_key: key.into(),
-                            });
-                        })
-                    }));
+                        .then(&new_closure(closure_registry, "cb4", {
+                            let state = state.clone();
+                            let cred_id = cred_id.clone();
+                            let authnr_private_key = authnr_private_key.clone();
+                            Closure::new(move |key: JsValue| {
+                                state.set(Self::FileExchangeKeyImported {
+                                    cred_id: cred_id.clone(),
+                                    authnr_private_key: authnr_private_key.clone(),
+                                    file_exchange_key: key.into(),
+                                });
+                            })
+                        }));
+
+                    Ok(())
                 }
-            }
 
-            ProcedureState::FileExchangeKeyImported {
-                cred_id,
-                authnr_private_key,
-                file_exchange_key,
-            } => {
-                console::log_1(&"FileExchangeKeyImported".into());
+                Self::FileExchangeKeyImported {
+                    cred_id,
+                    authnr_private_key,
+                    file_exchange_key,
+                } => {
+                    console::log_1(&"FileExchangeKeyImported".into());
 
-                if let Some(callback) = &*next_callback {
-                    let _ = subtle
+                    let _ = subtle_crypto()?
                         .derive_key_with_object_and_str(
                             &EcdhKeyDeriveParams::new("ECDH", file_exchange_key),
                             authnr_private_key,
@@ -360,38 +343,36 @@ pub fn App() -> Html {
                             &Array::of1(&"deriveKey".into()),
                         )
                         .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        let cred_id = cred_id.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::FileWrappingHkdfInputImported {
-                                cred_id: cred_id.clone(),
-                                file_wrapping_hkdf_input: key.into(),
-                            });
-                        })
-                    }));
+                        .then(&new_closure(closure_registry, "cb5", {
+                            let state = state.clone();
+                            let cred_id = cred_id.clone();
+                            Closure::new(move |key: JsValue| {
+                                state.set(Self::FileWrappingHkdfInputImported {
+                                    cred_id: cred_id.clone(),
+                                    file_wrapping_hkdf_input: key.into(),
+                                });
+                            })
+                        }));
+
+                    Ok(())
                 }
-            }
 
-            ProcedureState::FileWrappingHkdfInputImported {
-                cred_id,
-                file_wrapping_hkdf_input,
-            } => {
-                console::log_1(&"FileWrappingHkdfInputImported".into());
+                Self::FileWrappingHkdfInputImported {
+                    cred_id,
+                    file_wrapping_hkdf_input,
+                } => {
+                    console::log_1(&"FileWrappingHkdfInputImported".into());
 
-                if let Some(callback) = &*next_callback {
-                    let _ = subtle
+                    let _ = subtle_crypto()?
                         .derive_key_with_object_and_object(
                             &HkdfParams::new(
                                 "HKDF",
                                 &"SHA-256".into(),
                                 &Uint8Array::from("foo".as_bytes()),
-                                &Uint8Array::try_from(vault_foo.keys.get(cred_id).unwrap().salt())
-                                    .unwrap(),
+                                &Uint8Array::try_from(
+                                    file_config.keys.get(cred_id).unwrap().salt(),
+                                )
+                                .unwrap(),
                             ),
                             file_wrapping_hkdf_input,
                             &AesKeyGenParams::new("AES-KW", 128),
@@ -399,35 +380,31 @@ pub fn App() -> Html {
                             &Array::of2(&"wrapKey".into(), &"unwrapKey".into()),
                         )
                         .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        let cred_id = cred_id.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::FileWrappingKeyDerived {
-                                cred_id: cred_id.clone(),
-                                file_wrapping_key: key.into(),
-                            });
-                        })
-                    }));
+                        .then(&new_closure(closure_registry, "cb6", {
+                            let state = state.clone();
+                            let cred_id = cred_id.clone();
+                            Closure::new(move |key: JsValue| {
+                                state.set(Self::FileWrappingKeyDerived {
+                                    cred_id: cred_id.clone(),
+                                    file_wrapping_key: key.into(),
+                                });
+                            })
+                        }));
+
+                    Ok(())
                 }
-            }
 
-            ProcedureState::FileWrappingKeyDerived {
-                cred_id,
-                file_wrapping_key,
-            } => {
-                console::log_2(&"FileWrappingKeyDerived".into(), file_wrapping_key);
+                Self::FileWrappingKeyDerived {
+                    cred_id,
+                    file_wrapping_key,
+                } => {
+                    console::log_2(&"FileWrappingKeyDerived".into(), file_wrapping_key);
 
-                if let Some(callback) = &*next_callback {
                     let password_key_encrypted =
-                        Uint8Array::try_from(vault_foo.keys.get(cred_id).unwrap().password_key())
+                        Uint8Array::try_from(file_config.keys.get(cred_id).unwrap().password_key())
                             .unwrap();
 
-                    let _ = subtle
+                    let _ = subtle_crypto()?
                         .unwrap_key_with_buffer_source_and_str_and_str(
                             "raw",
                             &password_key_encrypted.buffer(),
@@ -438,55 +415,59 @@ pub fn App() -> Html {
                             &Array::of2(&"encrypt".into(), &"decrypt".into()),
                         )
                         .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        Closure::new(move |key: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::FilePasswordKeyUnwrapped {
-                                file_password_key: key.into(),
-                            });
-                        })
-                    }));
+                        .then(&new_closure(closure_registry, "cb7", {
+                            let state = state.clone();
+                            Closure::new(move |key: JsValue| {
+                                state.set(Self::FilePasswordKeyUnwrapped {
+                                    file_password_key: key.into(),
+                                });
+                            })
+                        }));
+
+                    Ok(())
                 }
-            }
 
-            ProcedureState::FilePasswordKeyUnwrapped { file_password_key } => {
-                console::log_2(&"FilePasswordKeyUnwrapped".into(), file_password_key);
+                Self::FilePasswordKeyUnwrapped { file_password_key } => {
+                    console::log_2(&"FilePasswordKeyUnwrapped".into(), file_password_key);
 
-                if let Some(callback) = &*next_callback {
-                    let _ = subtle
+                    let _ = subtle_crypto()?
                         .decrypt_with_object_and_buffer_source(
                             &AesGcmParams::new(
                                 "AES-GCM",
-                                &Uint8Array::try_from(&vault_foo.iv).unwrap(),
+                                &Uint8Array::try_from(&file_config.iv).unwrap(),
                             ),
                             file_password_key,
-                            &Uint8Array::try_from(&vault_foo.content).unwrap(),
+                            &Uint8Array::try_from(&file_config.content).unwrap(),
                         )
                         .unwrap()
-                        .then(callback);
-                } else {
-                    next_callback.set(Some({
-                        let next_callback = next_callback.clone();
-                        let state = state.clone();
-                        Closure::new(move |output: JsValue| {
-                            next_callback.set(None);
-                            state.set(ProcedureState::PasswordDecrypted {
-                                password: output.into(),
-                            });
-                        })
-                    }));
-                }
-            }
+                        .then(&new_closure(closure_registry, "cb8", {
+                            let state = state.clone();
+                            Closure::new(move |output: JsValue| {
+                                state.set(Self::PasswordDecrypted {
+                                    password: output.into(),
+                                });
+                            })
+                        }));
 
-            ProcedureState::PasswordDecrypted { password } => {
-                console::log_2(&"PasswordDecrypted".into(), password);
+                    Ok(())
+                }
+
+                Self::PasswordDecrypted { password } => {
+                    console::log_2(&"PasswordDecrypted".into(), password);
+
+                    Ok(())
+                }
             }
         }
     }
+
+    let procedure_state = use_state(|| ProcedureState::Init);
+    let _ = ProcedureState::advance(
+        &procedure_state,
+        &closure_registry,
+        &vault_config,
+        &vault_foo,
+    );
 
     let on_clear_error = {
         let state = state.clone();
