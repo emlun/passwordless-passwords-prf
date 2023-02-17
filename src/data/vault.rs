@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use super::Base64;
 use super::UserHandle;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct UserConfig {
     #[serde(rename = "v")]
     version: u32,
@@ -15,7 +15,7 @@ pub struct UserConfig {
     pub fido_credentials: Vec<FidoCredential>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct FidoCredential {
     pub id: Base64,
     pub name: Option<String>,
@@ -23,7 +23,7 @@ pub struct FidoCredential {
     pub public_key: Base64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct PasswordFile {
     pub content: Base64,
     pub iv: Base64,
@@ -31,7 +31,7 @@ pub struct PasswordFile {
     pub keys: HashMap<Base64, PasswordKey>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct PasswordKey(Base64, Base64, Base64);
 
 impl PasswordKey {
