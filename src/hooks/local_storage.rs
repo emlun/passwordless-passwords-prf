@@ -2,9 +2,15 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::ops::Deref;
 use std::rc::Rc;
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
+use web_sys::console;
 use web_sys::Storage;
+use web_sys::StorageEvent;
+use web_sys::Window;
 use yew::hook;
+use yew::use_mut_ref;
 use yew::use_state;
 use yew::UseStateHandle;
 
@@ -39,6 +45,7 @@ impl From<serde_json::Error> for SetError {
 }
 
 type ParseResult<T> = Result<Rc<T>, (String, serde_json::Error)>;
+type ListenerCallback = Closure<dyn FnMut(StorageEvent)>;
 
 pub struct UseLocalStorageHandle<'name, T>
 where
@@ -103,35 +110,71 @@ where
         self.state.set(Some(Ok(Rc::new(value))));
         Ok(())
     }
-}
 
-#[hook]
-pub fn use_local_storage<'name, T>(
-    name: &'name str,
-) -> Result<UseLocalStorageHandle<'name, T>, InitError>
-where
-    T: Serialize,
-    T: DeserializeOwned,
-    T: 'static,
-{
-    let storage: Storage = web_sys::window()
-        .ok_or(InitError::Unavailable)?
-        .local_storage()?
-        .ok_or(InitError::Unavailable)?;
-
-    let value = storage.get_item(name)?;
-
-    let state: UseStateHandle<Option<ParseResult<T>>> = use_state(move || {
+    fn deserialize(value: Option<String>) -> Option<ParseResult<T>> {
         value.map(|s| {
             serde_json::from_str(&s)
                 .map(Rc::new)
                 .map_err(|err| (s, err))
         })
-    });
+    }
 
-    Ok(UseLocalStorageHandle {
+    fn on_storage_event(&self, event: StorageEvent) {
+        if event.key().as_deref() == Some(self.name) {
+            self.state.set(Self::deserialize(event.new_value()))
+        }
+    }
+}
+
+#[hook]
+pub fn use_local_storage<T>(
+    name: &'static str,
+) -> Result<UseLocalStorageHandle<'static, T>, InitError>
+where
+    T: Serialize,
+    T: DeserializeOwned,
+    T: 'static,
+{
+    let window: Window = web_sys::window().ok_or(InitError::Unavailable)?;
+    let storage: Storage = window.local_storage()?.ok_or(InitError::Unavailable)?;
+
+    let value = storage.get_item(name)?;
+    let state: UseStateHandle<Option<ParseResult<T>>> =
+        { use_state(move || UseLocalStorageHandle::deserialize(value)) };
+
+    let handle = UseLocalStorageHandle {
         storage: Rc::new(storage),
         name,
         state,
-    })
+    };
+
+    let listener: Rc<ListenerCallback> = {
+        let handle = handle.clone();
+        Rc::new(Closure::new(move |e: StorageEvent| {
+            handle.on_storage_event(e);
+        }))
+    };
+
+    let current_listener = {
+        let listener = Rc::clone(&listener);
+        use_mut_ref(move || listener)
+    };
+
+    if let Err(err) = window.remove_event_listener_with_callback(
+        "storage",
+        Closure::as_ref(Rc::as_ref(&current_listener.borrow())).unchecked_ref(),
+    ) {
+        console::error_2(
+            &format!("Failed to update storage event listener for \"{name}\"").into(),
+            &err,
+        );
+    } else {
+        window.add_event_listener_with_callback(
+            "storage",
+            Closure::as_ref(Rc::as_ref(&listener)).unchecked_ref(),
+        )?;
+    }
+    *current_listener.borrow_mut() = listener;
+
+    Ok(handle)
 }
