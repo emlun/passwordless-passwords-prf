@@ -208,7 +208,7 @@ impl DecryptionProcedureState {
                 cred_id,
                 authnr_private_key,
             } => {
-                console::log_2(&"AuthenticatorKeyDerived".into(), authnr_private_key);
+                console::log_1(&"AuthenticatorKeyDerived".into());
 
                 let _ = subtle_crypto()?
                     .import_key_with_object(
@@ -307,7 +307,7 @@ impl DecryptionProcedureState {
                 cred_id,
                 file_wrapping_key,
             } => {
-                console::log_2(&"FileWrappingKeyDerived".into(), file_wrapping_key);
+                console::log_1(&"FileWrappingKeyDerived".into());
 
                 let password_key_encrypted =
                     Uint8Array::try_from(file_config.keys.get(cred_id).unwrap().password_key())
@@ -337,7 +337,7 @@ impl DecryptionProcedureState {
             }
 
             Self::FilePasswordKeyUnwrapped { file_password_key } => {
-                console::log_2(&"FilePasswordKeyUnwrapped".into(), file_password_key);
+                console::log_1(&"FilePasswordKeyUnwrapped".into());
 
                 let _ = subtle_crypto()?
                     .decrypt_with_object_and_buffer_source(
@@ -361,8 +361,8 @@ impl DecryptionProcedureState {
                 Ok(())
             }
 
-            Self::PasswordDecrypted { password } => {
-                console::log_2(&"PasswordDecrypted".into(), password);
+            Self::PasswordDecrypted { .. } => {
+                console::log_1(&"PasswordDecrypted".into());
 
                 Ok(())
             }
