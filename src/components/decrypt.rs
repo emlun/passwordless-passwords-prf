@@ -94,6 +94,7 @@ impl DecryptionProcedureState {
         state: &UseStateHandle<Self>,
         closure_registry: &Rc<RefCell<ClosuresMap>>,
         vault_config: &UserConfig,
+        file_name: &str,
         file_config: &PasswordFile,
     ) -> Result<(), JsValue> {
         match &**state {
@@ -280,7 +281,7 @@ impl DecryptionProcedureState {
                         &HkdfParams::new(
                             "HKDF",
                             &"SHA-256".into(),
-                            &Uint8Array::from("foo".as_bytes()),
+                            &Uint8Array::from(file_name.as_bytes()),
                             &Uint8Array::try_from(file_config.keys.get(cred_id).unwrap().salt())
                                 .unwrap(),
                         ),
@@ -390,6 +391,7 @@ pub fn Decrypt(props: &Props) -> Html {
         &procedure_state,
         &closure_registry,
         &props.config.user,
+        &props.file,
         props.config.files.get(&props.file).unwrap(),
     );
 
@@ -398,12 +400,7 @@ pub fn Decrypt(props: &Props) -> Html {
             {
                 if let DecryptionProcedureState::PasswordDecrypted { password  } = &*procedure_state {
                     html! {
-                        <>
-                        { "Decrypted password:" }
-                        <pre>
                         { String::from_utf8(Uint8Array::new(password).to_vec()).unwrap() }
-                        </pre>
-                            </>
                     }
                 } else {
                     html! {

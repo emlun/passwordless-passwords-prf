@@ -10,7 +10,7 @@ use yew::Reducible;
 
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
-use crate::components::decrypt::Decrypt;
+use crate::components::files_list::FilesList;
 use crate::components::get_button::GetButton;
 use crate::components::import::Import;
 use crate::data::vault::VaultConfig;
@@ -160,14 +160,34 @@ pub fn App() -> Html {
                 <div>
                     <CredentialsList {credentials} {on_delete} {on_rename} />
                 </div>
+                <div>
+                    {
+                        match &*config {
+                            Some(Ok(config)) => {
+                                html!{
+                                    <FilesList config={Rc::clone(config)} />
+                                }
+                            }
+
+                            None => {
+                                html! {
+                                    <p>{ "Vault is not initialized." }</p>
+                                }
+                            }
+
+                            Some(Err(_)) => {
+                                html! {
+                                    <p>{ "Vault is corrupted." }</p>
+                                }
+                            }
+                        }
+                    }
+                </div>
 
                 {
-                    if let Some(config) = config.ok() {
+                    if config.is_some() {
                         html! {
-                            <Decrypt
-                                {config}
-                                file={"foo".to_string()}
-                            />
+                            <></>
                         }
                     } else {
                         html! {
