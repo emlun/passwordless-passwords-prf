@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use super::Base64;
 use super::UserHandle;
@@ -11,7 +12,7 @@ pub struct VaultConfig {
     version: u32,
 
     pub user: UserConfig,
-    pub files: HashMap<String, PasswordFile>,
+    pub files: HashMap<String, Rc<PasswordFile>>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
