@@ -6,12 +6,20 @@ use super::Base64;
 use super::UserHandle;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
+pub struct VaultConfig {
+    #[serde(rename = "v")]
+    version: u32,
+
+    pub user: UserConfig,
+    pub files: HashMap<String, PasswordFile>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct UserConfig {
     #[serde(rename = "v")]
     version: u32,
 
     pub user_handle: UserHandle,
-
     pub fido_credentials: Vec<FidoCredential>,
 }
 
