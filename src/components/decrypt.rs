@@ -34,6 +34,7 @@ use yew::UseStateHandle;
 
 use crate::data::vault::PasswordFile;
 use crate::data::vault::UserConfig;
+use crate::data::vault::VaultConfig;
 use crate::data::Base64;
 use crate::webauthn::prf_extension;
 use crate::webauthn::webauthn_get;
@@ -372,8 +373,8 @@ impl DecryptionProcedureState {
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
-    pub vault_config: Rc<UserConfig>,
-    pub file_config: Rc<PasswordFile>,
+    pub config: Rc<VaultConfig>,
+    pub file: String,
 }
 
 #[styled_component]
@@ -388,8 +389,8 @@ pub fn Decrypt(props: &Props) -> Html {
     let _ = DecryptionProcedureState::advance(
         &procedure_state,
         &closure_registry,
-        &props.vault_config,
-        &props.file_config,
+        &props.config.user,
+        props.config.files.get(&props.file).unwrap(),
     );
 
     html! {

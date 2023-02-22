@@ -13,8 +13,7 @@ use crate::components::credentials_list::CredentialsList;
 use crate::components::decrypt::Decrypt;
 use crate::components::get_button::GetButton;
 use crate::components::import::Import;
-use crate::data::vault::PasswordFile;
-use crate::data::vault::UserConfig;
+use crate::data::vault::VaultConfig;
 use crate::data::Credential;
 use crate::data::CredentialId;
 use crate::hooks::local_storage::use_local_storage;
@@ -78,10 +77,7 @@ pub fn App() -> Html {
     let state = use_reducer_eq(AppState::default);
     let credentials = Rc::clone(&state.credentials);
 
-    let vault_config: UseLocalStorageHandle<UserConfig> =
-        use_local_storage("cli_vault-user.json").unwrap();
-    let vault_foo: UseLocalStorageHandle<PasswordFile> =
-        use_local_storage("cli_vault/foo.vlt").unwrap();
+    let config: UseLocalStorageHandle<VaultConfig> = use_local_storage("vault").unwrap();
 
     let on_clear_error = {
         let state = state.clone();
@@ -118,20 +114,11 @@ pub fn App() -> Html {
         })
     };
 
-    let on_import_user_config = {
-        let vault_config = vault_config.clone();
+    let on_import_config = {
+        let config = config.clone();
         Callback::from(move |s: String| {
-            if vault_config.set_from_str(&s).is_err() {
-                console::error_1(&"Import failed".into());
-            }
-        })
-    };
-
-    let on_import_file_config = {
-        let vault_foo = vault_foo.clone();
-        Callback::from(move |s: String| {
-            if vault_foo.set_from_str(&s).is_err() {
-                console::error_1(&"Import failed".into());
+            if let Err(err) = config.set_from_str(&s) {
+                console::error_2(&"Import failed".into(), &err.to_string().into());
             }
         })
     };
@@ -175,15 +162,17 @@ pub fn App() -> Html {
                 </div>
 
                 {
-                    if let Some((vault_config, file_config)) = vault_config.ok().zip(vault_foo.ok()) {
+                    if let Some(config) = config.ok() {
                         html! {
-                            <Decrypt {vault_config} {file_config} />
+                            <Decrypt
+                                {config}
+                                file={"foo".to_string()}
+                            />
                         }
                     } else {
                         html! {
                             <>
-                                <Import on_import={on_import_user_config} ><h2>{ "Import user config:" }</h2></Import>
-                                <Import on_import={on_import_file_config} ><h2>{ "Import encrypted file:" }</h2></Import>
+                                <Import on_import={on_import_config} ><h2>{ "Import vault config:" }</h2></Import>
                             </>
                         }
                     }

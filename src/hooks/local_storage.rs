@@ -26,6 +26,23 @@ pub enum SetError {
     SerializeError(serde_json::Error),
 }
 
+impl std::error::Error for SetError {}
+
+impl std::fmt::Display for SetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::JsError(js_value) => write!(
+                f,
+                "Failed to set local storage: JavaScript error: {js_value:?}",
+            ),
+            Self::SerializeError(err) => write!(
+                f,
+                "Failed to set local storage: Serialization failed: {err}",
+            ),
+        }
+    }
+}
+
 impl From<JsValue> for InitError {
     fn from(err: JsValue) -> Self {
         Self::JsError(err)
