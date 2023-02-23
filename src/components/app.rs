@@ -9,6 +9,7 @@ use yew::Callback;
 use yew::Html;
 use yew::Reducible;
 
+use crate::components::collapse::Collapse;
 use crate::components::create_button::CreateButton;
 use crate::components::credentials_list::CredentialsList;
 use crate::components::files_list::FilesList;
@@ -168,19 +169,14 @@ pub fn App() -> Html {
                     }
                 </div>
 
-                {
-                    if config.is_some() {
-                        html! {
-                            <></>
-                        }
-                    } else {
-                        html! {
-                            <>
-                                <Import on_import={on_import_config} ><h2>{ "Import vault config:" }</h2></Import>
-                            </>
-                        }
-                    }
-                }
+                <div>
+                    <Collapse
+                        button_text="Import vault config"
+                        start_expanded={config.is_none()}
+                    >
+                        <Import on_import={on_import_config} ></Import>
+                    </Collapse>
+                </div>
             </div>
 
             <div class={classes!("footer")}>
