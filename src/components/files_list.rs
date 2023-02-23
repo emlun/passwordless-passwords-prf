@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use yew::classes;
 use yew::function_component;
 use yew::html;
 use yew::use_state;
@@ -31,42 +32,46 @@ pub fn FileItem(props: &FileItemProps) -> Html {
     });
 
     html! {
-        <li>
-            <pre>{ &props.name }</pre>
+        <div class={classes!("file-item")}>
+            <div class={classes!("header")}>
+                <pre>{ &props.name }</pre>
 
-            {
-                if *decrypted {
-                    html! {
-                        <pre>
-                            <Decrypt
+                {
+                    if *decrypted {
+                        html! {
+                            <button onclick={on_hide}>
+                            { "Hide" }
+                            </button>
+                        }
+                    } else {
+                        html! {
+                            <button onclick={on_show}>
+                            { "Show" }
+                            </button>
+                        }
+                    }
+                }
+            </div>
+
+            <div class={classes!("content", Some("expanded").filter(|_| *decrypted))}>
+                {
+                    if *decrypted {
+                        html! {
+                            <pre>
+                                <Decrypt
                                 config={Rc::clone(&props.config)}
-                                file={props.name.clone()}
+                            file={props.name.clone()}
                             />
-                        </pre>
-                    }
-                } else {
-                    html! {
-                        <></>
-                    }
-                }
-            }
-
-            {
-                if *decrypted {
-                    html! {
-                        <button onclick={on_hide}>
-                        { "Hide" }
-                        </button>
-                    }
-                } else {
-                    html! {
-                        <button onclick={on_show}>
-                        { "Show" }
-                        </button>
+                                </pre>
+                        }
+                    } else {
+                        html! {
+                            <></>
+                        }
                     }
                 }
-            }
-        </li>
+            </div>
+        </div>
     }
 }
 
@@ -83,17 +88,21 @@ pub fn FilesList(props: &Props) -> Html {
         .iter()
         .map(|(name, file)| {
             html! {
-                <FileItem
-                    key={name.to_string()}
-                    config={Rc::clone(&props.config)}
-                    name={name.to_string()}
-                    file={Rc::clone(file)}
-                />
+                <li key={name.to_string()}>
+                    <FileItem
+                        config={Rc::clone(&props.config)}
+                        name={name.to_string()}
+                        file={Rc::clone(file)}
+                    />
+                </li>
             }
         })
         .collect::<Html>();
 
     html! {
-        <ul>{files}</ul>
+        <>
+            <h2>{ "Vault entries" }</h2>
+            <ul class={classes!("files-list")}>{files}</ul>
+        </>
     }
 }
