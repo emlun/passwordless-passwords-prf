@@ -2,6 +2,7 @@ use std::rc::Rc;
 use stylist::yew::styled_component;
 use web_sys::console;
 use web_sys::PublicKeyCredential;
+use yew::classes;
 use yew::html;
 use yew::use_reducer_eq;
 use yew::Callback;
@@ -124,25 +125,8 @@ pub fn App() -> Html {
     };
 
     html! {
-        <div class={css! {
-            background: ${"#101010"};
-            color: ${"#f1f1f1"};
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            margin: 0;
-            min-height: 100%;
-            min-width: 100%;
-            padding: 0;
-            position: absolute;
-        }}>
-
-            <div class={css! {
-                flex-grow: 1;
-                flex-shrink: 0;
-                margin: 0 auto;
-                padding: ${"2em 10em"};
-            }}>
+        <div class={classes!("wrapper")}>
+            <div class={classes!("main-content")}>
                 <div>
                     <CreateButton
                         credentials={Rc::clone(&credentials)}
@@ -199,14 +183,7 @@ pub fn App() -> Html {
                 }
             </div>
 
-            <div class={css! {
-                border-top: ${"1px solid #626262"};
-                color: ${"1px solid #626262"};
-                flex-grow: 0;
-                flex-shrink: 0;
-                padding: ${"1em 10em"};
-                text-align: center;
-            }}>
+            <div class={classes!("footer")}>
                 {"Footer"}
             </div>
         </div>
