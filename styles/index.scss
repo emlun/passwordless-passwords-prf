@@ -25,10 +25,24 @@ body {
 }
 
 .main-content {
+  display: flex;
+  flex-direction: column;
   flex-grow: 1;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  min-width: 20em;
+  max-width: 50em;
   margin: 0 auto;
-  padding: 2em 10em;
+  padding: 2em;
+
+  & > * {
+    flex-grow: 0;
+    flex-shrink: 0;
+  }
+}
+
+.flex-grow {
+  flex-grow: 1;
 }
 
 .footer {
@@ -41,3 +55,4 @@ body {
 }
 
 @import "collapse";
+@import "files_list";

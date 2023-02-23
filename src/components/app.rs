@@ -169,6 +169,8 @@ pub fn App() -> Html {
                     }
                 </div>
 
+                <div class={classes!("flex-grow")} />
+
                 <div>
                     <Collapse
                         button_text="Import vault config"

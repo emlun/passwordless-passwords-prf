@@ -1,0 +1,42 @@
+ul.files-list {
+  list-style-type: none;
+  padding: 0;
+}
+
+.files-list {
+
+  .file-item {
+
+    background: rgb(0 0 255 / 6%);
+    border-radius: 0.5em;
+    padding: 0.5em;
+    margin: 0.5em 0;
+    border: 1px solid #ffffff26;
+
+    .header {
+      align-items: baseline;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+
+      & > * {
+        flex-grow: 1;
+        flex-shrink: 0;
+      }
+
+      & > button {
+        flex-grow: 0;
+      }
+
+    }
+
+    .content {
+      &.expanded {
+        border-top: 1px solid #ffffff26;
+      }
+    }
+
+  }
+
+}
