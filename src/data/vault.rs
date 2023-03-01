@@ -29,7 +29,7 @@ pub struct FidoCredential {
     pub id: Base64,
     pub name: Option<String>,
     pub prf_salt: Base64,
-    pub public_key: Base64,
+    pub ecdh_pubkey: Base64,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -41,18 +41,8 @@ pub struct PasswordFile {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-pub struct PasswordKey(Base64, Base64, Base64);
-
-impl PasswordKey {
-    pub fn exchange_pubkey(&self) -> &Base64 {
-        &self.0
-    }
-
-    pub fn salt(&self) -> &Base64 {
-        &self.1
-    }
-
-    pub fn password_key(&self) -> &Base64 {
-        &self.2
-    }
+pub struct PasswordKey {
+    pub ecdh_pubkey: Base64,
+    pub hkdf_salt: Base64,
+    pub wrapped_key: Base64,
 }

@@ -104,7 +104,7 @@ impl DecryptionProcedureState {
                 let _ = subtle_crypto()?
                     .import_key_with_object(
                         "spki",
-                        &Uint8Array::try_from(&vault_config.fido_credentials[0].public_key)
+                        &Uint8Array::try_from(&vault_config.fido_credentials[0].ecdh_pubkey)
                             .unwrap(),
                         EcKeyImportParams::new("ECDH").named_curve("P-256"),
                         false,
@@ -215,10 +215,8 @@ impl DecryptionProcedureState {
                 let _ = subtle_crypto()?
                     .import_key_with_object(
                         "spki",
-                        &Uint8Array::try_from(
-                            file_config.keys.get(cred_id).unwrap().exchange_pubkey(),
-                        )
-                        .unwrap(),
+                        &Uint8Array::try_from(&file_config.keys.get(cred_id).unwrap().ecdh_pubkey)
+                            .unwrap(),
                         EcKeyImportParams::new("ECDH").named_curve("P-256"),
                         false,
                         &Array::new(),
@@ -282,8 +280,10 @@ impl DecryptionProcedureState {
                             "HKDF",
                             &"SHA-256".into(),
                             &Uint8Array::from(file_name.as_bytes()),
-                            &Uint8Array::try_from(file_config.keys.get(cred_id).unwrap().salt())
-                                .unwrap(),
+                            &Uint8Array::try_from(
+                                &file_config.keys.get(cred_id).unwrap().hkdf_salt,
+                            )
+                            .unwrap(),
                         ),
                         file_wrapping_hkdf_input,
                         &AesKeyGenParams::new("AES-KW", 128),
@@ -312,7 +312,7 @@ impl DecryptionProcedureState {
                 console::log_1(&"FileWrappingKeyDerived".into());
 
                 let password_key_encrypted =
-                    Uint8Array::try_from(file_config.keys.get(cred_id).unwrap().password_key())
+                    Uint8Array::try_from(&file_config.keys.get(cred_id).unwrap().wrapped_key)
                         .unwrap();
 
                 let _ = subtle_crypto()?
