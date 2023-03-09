@@ -175,6 +175,7 @@ pub fn App() -> Html {
                     <Collapse
                         button_text="Import vault config"
                         start_expanded={config.is_none()}
+                        reverse_icon={true}
                     >
                         <Import on_import={on_import_config} ></Import>
                     </Collapse>

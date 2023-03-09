@@ -37,6 +37,9 @@
       content: "»"
     }
   }
+  &.reverse-icon .toggle-icon {
+    transform: rotate(90deg) scaleX(-1);
+  }
 
   .content {
     max-height: 0;
@@ -52,6 +55,9 @@
 
     .toggle-icon {
       transform: rotate(90deg) scaleX(-1);
+    }
+    &.reverse-icon .toggle-icon {
+      transform: rotate(90deg);
     }
 
     .content {

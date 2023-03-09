@@ -13,6 +13,8 @@ pub struct Props {
     pub children: Children,
     pub start_expanded: bool,
     pub button_text: String,
+    #[prop_or(false)]
+    pub reverse_icon: bool,
 }
 
 #[styled_component]
@@ -27,9 +29,10 @@ pub fn Collapse(props: &Props) -> Html {
     };
 
     let class_expanded = Some("expanded").filter(|_| *expanded);
+    let class_reverse_icon = Some("reverse-icon").filter(|_| props.reverse_icon);
 
     html! {
-        <div class={classes!("collapse", class_expanded)}>
+        <div class={classes!("collapse", class_expanded, class_reverse_icon)}>
             <button
                 class={classes!("toggle")}
                 onclick={on_toggle}
