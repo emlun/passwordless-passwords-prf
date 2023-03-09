@@ -26,3 +26,10 @@ $ poetry run ykman fido vault export
 ```
 
 Then paste the output from the above `export` command into the "Import vault config" box.
+
+If running the web app hosted somewhere else than `localhost`, you must set the
+`--rp-id` option to match when initializing the vault:
+
+```
+$ poetry run ykman fido vault register --rp-id example.org
+```
