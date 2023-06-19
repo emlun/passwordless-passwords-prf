@@ -1,4 +1,7 @@
+use js_sys::Uint8Array;
 use std::rc::Rc;
+use wasm_bindgen_futures::spawn_local;
+use web_sys::console;
 use yew::classes;
 use yew::function_component;
 use yew::html;
@@ -7,37 +10,53 @@ use yew::Callback;
 use yew::Html;
 use yew::Properties;
 
-use crate::components::decrypt::Decrypt;
-use crate::data::vault::PasswordFile;
+use crate::crypto::decrypt::decrypt;
 use crate::data::vault::VaultConfig;
 
 #[derive(PartialEq, Properties)]
 pub struct FileItemProps {
     pub config: Rc<VaultConfig>,
-    pub name: String,
-    pub file: Rc<PasswordFile>,
+    pub file: String,
 }
 
 #[function_component]
 pub fn FileItem(props: &FileItemProps) -> Html {
-    let decrypted = use_state(|| false);
+    let decrypted = use_state(|| None);
 
     let on_hide = Callback::from({
         let decrypted = decrypted.clone();
-        move |_| decrypted.set(false)
+        move |_| decrypted.set(None)
     });
+
     let on_show = Callback::from({
         let decrypted = decrypted.clone();
-        move |_| decrypted.set(true)
+        let config = Rc::clone(&props.config);
+        let file = props.file.clone();
+        move |_| {
+            let decrypted = decrypted.clone();
+            let config = Rc::clone(&config);
+            let file = file.clone();
+            console::log_1(&"spawning...".into());
+            spawn_local(async move {
+                console::log_1(&"spawned!".into());
+                if let Ok(dec) =
+                    decrypt(&config.user, &file, config.files.get(&file).unwrap()).await
+                {
+                    console::log_1(&"Finished!".into());
+                    decrypted.set(Some(dec));
+                }
+                console::log_1(&"Exit.".into());
+            });
+        }
     });
 
     html! {
         <div class={classes!("file-item")}>
             <div class={classes!("header")}>
-                <pre>{ &props.name }</pre>
+                <pre>{ &props.file }</pre>
 
                 {
-                    if *decrypted {
+                    if decrypted.is_some() {
                         html! {
                             <button onclick={on_hide}>
                             { "Hide" }
@@ -53,16 +72,13 @@ pub fn FileItem(props: &FileItemProps) -> Html {
                 }
             </div>
 
-            <div class={classes!("content", Some("expanded").filter(|_| *decrypted))}>
+            <div class={classes!("content", Some("expanded").filter(|_| decrypted.is_some()))}>
                 {
-                    if *decrypted {
+                    if let Some(password) = &*decrypted {
                         html! {
                             <pre>
-                                <Decrypt
-                                config={Rc::clone(&props.config)}
-                            file={props.name.clone()}
-                            />
-                                </pre>
+                                { String::from_utf8(Uint8Array::new(&password).to_vec()).unwrap() }
+                            </pre>
                         }
                     } else {
                         html! {
@@ -85,14 +101,13 @@ pub fn FilesList(props: &Props) -> Html {
     let files = props
         .config
         .files
-        .iter()
-        .map(|(name, file)| {
+        .keys()
+        .map(|name| {
             html! {
                 <li key={name.to_string()}>
                     <FileItem
                         config={Rc::clone(&props.config)}
-                        name={name.to_string()}
-                        file={Rc::clone(file)}
+                        file={name.to_string()}
                     />
                 </li>
             }
