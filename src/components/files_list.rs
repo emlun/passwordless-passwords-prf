@@ -1,4 +1,3 @@
-use js_sys::Uint8Array;
 use std::rc::Rc;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
@@ -10,8 +9,9 @@ use yew::Callback;
 use yew::Html;
 use yew::Properties;
 
-use crate::crypto::decrypt::decrypt;
+use crate::crypto::decrypt;
 use crate::data::vault::VaultConfig;
+use crate::error::JsOrSerdeError;
 
 #[derive(PartialEq, Properties)]
 pub struct FileItemProps {
@@ -36,16 +36,22 @@ pub fn FileItem(props: &FileItemProps) -> Html {
             let decrypted = decrypted.clone();
             let config = Rc::clone(&config);
             let file = file.clone();
-            console::log_1(&"spawning...".into());
             spawn_local(async move {
-                console::log_1(&"spawned!".into());
-                if let Ok(dec) =
-                    decrypt(&config.user, &file, config.files.get(&file).unwrap()).await
-                {
-                    console::log_1(&"Finished!".into());
-                    decrypted.set(Some(dec));
+                match decrypt(&config.contents.get(&file).unwrap(), &config.user.keypairs).await {
+                    Ok(dec) => {
+                        console::log_1(&"Finished!".into());
+                        decrypted.set(Some(String::from_utf8(dec).unwrap()));
+                    }
+                    Err(JsOrSerdeError::JsError(e)) => {
+                        console::log_2(&"Decryption failed:".into(), &e);
+                    }
+                    Err(JsOrSerdeError::SerializeError(e)) => {
+                        console::log_2(
+                            &"Decryption failed: (De)serialization failed".into(),
+                            &e.to_string().into(),
+                        );
+                    }
                 }
-                console::log_1(&"Exit.".into());
             });
         }
     });
@@ -77,7 +83,7 @@ pub fn FileItem(props: &FileItemProps) -> Html {
                     if let Some(password) = &*decrypted {
                         html! {
                             <pre>
-                                { String::from_utf8(Uint8Array::new(&password).to_vec()).unwrap() }
+                                { password }
                             </pre>
                         }
                     } else {
@@ -100,7 +106,7 @@ pub struct Props {
 pub fn FilesList(props: &Props) -> Html {
     let files = props
         .config
-        .files
+        .contents
         .keys()
         .map(|name| {
             html! {

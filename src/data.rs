@@ -3,7 +3,11 @@ use js_sys::ArrayBuffer;
 use js_sys::Uint8Array;
 use serde::Deserialize;
 use serde::Serialize;
-use web_sys::PublicKeyCredential;
+use wasm_bindgen::JsValue;
+use web_sys::PublicKeyCredentialDescriptor;
+use web_sys::PublicKeyCredentialType;
+
+use crate::crypto::gen_random;
 
 pub mod vault;
 
@@ -53,6 +57,17 @@ impl TryFrom<Uint8Array> for Base64 {
 #[serde(from = "Base64", into = "Base64")]
 pub struct UserHandle(Vec<u8>);
 
+impl UserHandle {
+    pub async fn generate() -> Result<Self, JsValue> {
+        Ok(Self(Vec::from(gen_random::<64>()?)))
+    }
+
+    pub fn uint8_array(&self) -> Uint8Array {
+        let Self(v) = self;
+        Uint8Array::from(v.as_slice())
+    }
+}
+
 impl From<UserHandle> for Base64 {
     fn from(UserHandle(v): UserHandle) -> Self {
         Self(v)
@@ -71,10 +86,7 @@ pub struct Base64Url(pub String);
 #[derive(Clone, PartialEq)]
 // #[derive(Clone, Deserialize, PartialEq, Serialize)]
 // #[serde(from = "Base64", into = "Base64")]
-pub struct CredentialId {
-    pub raw: ArrayBuffer,
-    pub b64: Base64Url,
-}
+pub struct CredentialId(Vec<u8>);
 
 // impl From<CredentialId> for Base64 {
 //     fn from(cred_id: CredentialId) -> Self {
@@ -82,51 +94,52 @@ pub struct CredentialId {
 //     }
 // }
 
-// impl From<Base64> for CredentialId {
-//     fn from(Base64(v): Base64) -> Self {
-//         Self {
-//             b64: Base64Url(base64::engine::general_purpose::STANDARD.encode(&v)),
-//             raw: Uint8Array::from(&v).buffer(),
-//         }
-//     }
-// }
+impl From<Vec<u8>> for CredentialId {
+    fn from(v: Vec<u8>) -> Self {
+        Self(v)
+    }
+}
 
 impl CredentialId {
     pub fn b64_abbrev(&self, max_len: usize) -> String {
-        if self.b64.0.len() <= max_len {
-            self.b64.0.clone()
+        let Self(v) = self;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(v);
+
+        if b64.len() <= max_len {
+            b64.clone()
         } else {
-            format!("{}…", &self.b64.0[0..max_len])
+            format!("{}…", &b64[0..max_len])
         }
+    }
+
+    pub fn b64url(&self) -> String {
+        let Self(v) = self;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v)
     }
 }
 
-impl From<&CredentialId> for yew::virtual_dom::Key {
-    fn from(val: &CredentialId) -> Self {
-        (val.b64.0.as_str()).into()
+impl From<&CredentialId> for PublicKeyCredentialDescriptor {
+    fn from(v: &CredentialId) -> PublicKeyCredentialDescriptor {
+        PublicKeyCredentialDescriptor::new(&Uint8Array::from(v), PublicKeyCredentialType::PublicKey)
     }
 }
+
+impl From<&CredentialId> for Uint8Array {
+    fn from(v: &CredentialId) -> Uint8Array {
+        Uint8Array::from(v.0.as_slice())
+    }
+}
+
+// impl From<&CredentialId> for yew::virtual_dom::Key {
+//     fn from(val: &CredentialId) -> Self {
+//         (val.b64.0.as_str()).into()
+//     }
+// }
 
 impl From<CredentialId> for yew::virtual_dom::Key {
     fn from(val: CredentialId) -> Self {
-        (val.b64.0.as_str()).into()
-    }
-}
-
-#[derive(Clone, PartialEq)]
-pub struct Credential {
-    pub id: CredentialId,
-    pub nickname: Option<String>,
-}
-
-impl From<PublicKeyCredential> for Credential {
-    fn from(cred: PublicKeyCredential) -> Self {
-        Self {
-            id: CredentialId {
-                raw: cred.raw_id(),
-                b64: Base64Url(cred.id()),
-            },
-            nickname: None,
-        }
+        let CredentialId(v) = val;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(v);
+        b64.into()
     }
 }

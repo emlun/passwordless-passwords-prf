@@ -14,50 +14,17 @@ use yew::use_mut_ref;
 use yew::use_state;
 use yew::UseStateHandle;
 
+use crate::error::JsOrSerdeError;
+
 #[derive(Debug)]
 pub enum InitError {
     Unavailable,
     JsError(JsValue),
 }
 
-#[derive(Debug)]
-pub enum SetError {
-    JsError(JsValue),
-    SerializeError(serde_json::Error),
-}
-
-impl std::error::Error for SetError {}
-
-impl std::fmt::Display for SetError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match self {
-            Self::JsError(js_value) => write!(
-                f,
-                "Failed to set local storage: JavaScript error: {js_value:?}",
-            ),
-            Self::SerializeError(err) => write!(
-                f,
-                "Failed to set local storage: Serialization failed: {err}",
-            ),
-        }
-    }
-}
-
 impl From<JsValue> for InitError {
     fn from(err: JsValue) -> Self {
         Self::JsError(err)
-    }
-}
-
-impl From<JsValue> for SetError {
-    fn from(err: JsValue) -> Self {
-        Self::JsError(err)
-    }
-}
-
-impl From<serde_json::Error> for SetError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::SerializeError(err)
     }
 }
 
@@ -109,11 +76,15 @@ where
             .and_then(|res| res.as_ref().ok().map(Rc::clone))
     }
 
-    pub fn set(&self, value: Option<T>) -> Result<(), SetError> {
+    pub fn set(&self, value: Option<T>) -> Result<(), JsOrSerdeError> {
+        self.set_with_rc(value.map(Rc::new))
+    }
+
+    pub fn set_with_rc(&self, value: Option<Rc<T>>) -> Result<(), JsOrSerdeError> {
         if let Some(value) = value {
             self.storage
                 .set_item(self.name, &serde_json::to_string(&value)?)?;
-            self.state.set(Some(Ok(Rc::new(value))));
+            self.state.set(Some(Ok(value)));
         } else {
             self.storage.remove_item(self.name)?;
             self.state.set(None);
@@ -121,7 +92,7 @@ where
         Ok(())
     }
 
-    pub fn set_from_str(&self, value_str: &str) -> Result<(), SetError> {
+    pub fn set_from_str(&self, value_str: &str) -> Result<(), JsOrSerdeError> {
         let value = serde_json::from_str(value_str)?;
         self.storage.set_item(self.name, value_str)?;
         self.state.set(Some(Ok(Rc::new(value))));
