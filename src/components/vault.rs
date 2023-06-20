@@ -48,7 +48,7 @@ pub fn Vault(props: &Props) -> Html {
         })
     };
 
-    let on_delete = {
+    let on_delete_credential = {
         let set_config = props.set_config.clone();
         let conf: Rc<VaultConfig> = Rc::clone(&props.config);
 
@@ -132,6 +132,29 @@ pub fn Vault(props: &Props) -> Html {
         })
     };
 
+    let on_delete_content = {
+        let set_config = props.set_config.clone();
+        let conf: Rc<VaultConfig> = Rc::clone(&props.config);
+
+        Callback::from(move |name: String| {
+            let set_config = set_config.clone();
+            let mut conf = Rc::clone(&conf);
+            Rc::make_mut(&mut conf).contents.remove(&name);
+
+            match set_config.emit(conf) {
+                Ok(()) => {
+                    console::log_1(&"Successfully encrypted content!".into());
+                }
+                Err(JsOrSerdeError::JsError(e)) => {
+                    console::log_2(&"Failed to encrypt content:".into(), &e);
+                }
+                Err(JsOrSerdeError::SerializeError(_)) => {
+                    console::log_1(&"Failed to encrypt content: JSON serialization failed.".into());
+                }
+            }
+        })
+    };
+
     html! {
         <>
             <div>
@@ -145,7 +168,7 @@ pub fn Vault(props: &Props) -> Html {
             <div>
                 <CredentialsList
                     keypairs={Rc::clone(&props.config.user.keypairs)}
-                    {on_delete}
+                    on_delete={on_delete_credential}
                     on_rename={on_rename_credential}
                 />
             </div>
@@ -153,6 +176,7 @@ pub fn Vault(props: &Props) -> Html {
                 <FilesList
                     config={Rc::clone(&props.config)}
                     on_reencrypt={on_insert.clone()}
+                    on_delete={on_delete_content.clone()}
                 />
             </div>
             <div>

@@ -21,6 +21,7 @@ pub struct FileItemProps {
     pub name: String,
     pub item: Rc<EncryptedContent>,
     pub on_reencrypt: Callback<(String, Vec<u8>)>,
+    pub on_delete: Callback<String>,
 }
 
 #[function_component]
@@ -66,6 +67,14 @@ pub fn FileItem(props: &FileItemProps) -> Html {
         }
     });
 
+    let on_delete = Callback::from({
+        let on_delete = props.on_delete.clone();
+        let name = props.name.clone();
+        move |_| {
+            on_delete.emit(name.clone());
+        }
+    });
+
     let on_toggle_keys = Callback::from({
         let show_keys = show_keys.clone();
         move |_| {
@@ -81,6 +90,10 @@ pub fn FileItem(props: &FileItemProps) -> Html {
                 <button onclick={on_toggle_keys}>
                     { "Keys: " }
                     { props.item.recipients.len() }
+                </button>
+
+                <button onclick={on_delete}>
+                    { "Delete" }
                 </button>
 
                 {
@@ -158,6 +171,7 @@ pub fn FileItem(props: &FileItemProps) -> Html {
 pub struct Props {
     pub config: Rc<VaultConfig>,
     pub on_reencrypt: Callback<(String, Vec<u8>)>,
+    pub on_delete: Callback<String>,
 }
 
 #[function_component]
@@ -174,6 +188,7 @@ pub fn FilesList(props: &Props) -> Html {
                         name={name.clone()}
                         item={item}
                         on_reencrypt={props.on_reencrypt.clone()}
+                        on_delete={props.on_delete.clone()}
                     />
                 </li>
             }
