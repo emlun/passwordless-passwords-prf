@@ -33,6 +33,20 @@ impl VaultConfig {
         })
     }
 
+    pub fn get_credential_nickname(&self, cred_id: &CredentialId) -> Option<&str> {
+        self.user
+            .keypairs
+            .iter()
+            .find(|keypair| {
+                keypair
+                    .additional_data()
+                    .ok()
+                    .map(|ad| ad.credential_id() == *cred_id)
+                    .unwrap_or(false)
+            })
+            .and_then(|keypair| keypair.nickname.as_ref().map(|s| s.as_str()))
+    }
+
     pub fn rename_credential(
         &mut self,
         cred_id: &CredentialId,

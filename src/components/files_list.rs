@@ -10,18 +10,22 @@ use yew::Html;
 use yew::Properties;
 
 use crate::crypto::decrypt;
+use crate::crypto::EncryptedContent;
 use crate::data::vault::VaultConfig;
+use crate::data::CredentialId;
 use crate::error::JsOrSerdeError;
 
 #[derive(PartialEq, Properties)]
 pub struct FileItemProps {
     pub config: Rc<VaultConfig>,
-    pub file: String,
+    pub name: String,
+    pub item: Rc<EncryptedContent>,
 }
 
 #[function_component]
 pub fn FileItem(props: &FileItemProps) -> Html {
     let decrypted = use_state(|| None);
+    let show_keys = use_state(|| false);
 
     let on_hide = Callback::from({
         let decrypted = decrypted.clone();
@@ -31,13 +35,13 @@ pub fn FileItem(props: &FileItemProps) -> Html {
     let on_show = Callback::from({
         let decrypted = decrypted.clone();
         let config = Rc::clone(&props.config);
-        let file = props.file.clone();
+        let item = props.item.clone();
         move |_| {
             let decrypted = decrypted.clone();
             let config = Rc::clone(&config);
-            let file = file.clone();
+            let item = item.clone();
             spawn_local(async move {
-                match decrypt(&config.contents.get(&file).unwrap(), &config.user.keypairs).await {
+                match decrypt(&item, &config.user.keypairs).await {
                     Ok(dec) => {
                         console::log_1(&"Finished!".into());
                         decrypted.set(Some(String::from_utf8(dec).unwrap()));
@@ -56,10 +60,22 @@ pub fn FileItem(props: &FileItemProps) -> Html {
         }
     });
 
+    let on_toggle_keys = Callback::from({
+        let show_keys = show_keys.clone();
+        move |_| {
+            show_keys.set(!*show_keys);
+        }
+    });
+
     html! {
         <div class={classes!("file-item")}>
             <div class={classes!("header")}>
-                <pre>{ &props.file }</pre>
+                <pre>{ &props.name }</pre>
+
+                <button onclick={on_toggle_keys}>
+                    { "Keys: " }
+                    { props.item.recipients.len() }
+                </button>
 
                 {
                     if decrypted.is_some() {
@@ -92,6 +108,31 @@ pub fn FileItem(props: &FileItemProps) -> Html {
                         }
                     }
                 }
+
+                {
+                    if *show_keys {
+                        html! {
+                            <>
+                                <p>
+                                    { "Encrypted to " }
+                                    { props.item.recipients.len() }
+                                    { " keys:" }
+                                </p>
+                                <ul>
+                                    { props.item.recipients.iter().map(|wkp| {
+                                        let cred_id = CredentialId::from(wkp.credential_id.clone());
+                                        let name: String = props.config.get_credential_nickname(&cred_id).map(|s| s.to_string()).unwrap_or_else(|| cred_id.b64_abbrev(24));
+                                        name
+                                    }).collect::<Html>() }
+                                </ul>
+                            </>
+                        }
+                    } else {
+                        html! {
+                            <></>
+                        }
+                    }
+                }
             </div>
         </div>
     }
@@ -107,13 +148,14 @@ pub fn FilesList(props: &Props) -> Html {
     let files = props
         .config
         .contents
-        .keys()
-        .map(|name| {
+        .iter()
+        .map(|(name, item)| {
             html! {
                 <li key={name.to_string()}>
                     <FileItem
                         config={Rc::clone(&props.config)}
-                        file={name.to_string()}
+                        name={name.clone()}
+                        item={item}
                     />
                 </li>
             }
