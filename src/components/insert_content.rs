@@ -5,6 +5,7 @@ use wasm_bindgen::JsCast;
 use web_sys::Event;
 use web_sys::HtmlInputElement;
 use web_sys::HtmlTextAreaElement;
+use web_sys::InputEvent;
 use web_sys::SubmitEvent;
 use yew::html;
 use yew::use_state;
@@ -18,6 +19,28 @@ use crate::data::vault::VaultConfig;
 pub struct Props {
     pub config: Rc<VaultConfig>,
     pub on_submit: Callback<(String, Vec<u8>)>,
+}
+
+#[derive(PartialEq, Properties)]
+pub struct ExistsIndicatorProps {
+    pub name_exists: bool,
+}
+
+#[styled_component]
+fn ExistsIndicator(props: &ExistsIndicatorProps) -> Html {
+    if props.name_exists {
+        html! {
+            <span class={css! {
+                color: #ff0000;
+                font-weight: bold;
+                margin-left: ${"1em"};
+            }}>
+                { "Already exists" }
+            </span>
+        }
+    } else {
+        html! { <></> }
+    }
 }
 
 #[styled_component]
@@ -39,7 +62,7 @@ pub fn InsertContent(props: &Props) -> Html {
 
     let on_change_name = {
         let name = name.clone();
-        move |e: Event| {
+        move |e: InputEvent| {
             if let Some(el) = e
                 .target()
                 .and_then(|t| t.dyn_into::<HtmlInputElement>().ok())
@@ -61,6 +84,8 @@ pub fn InsertContent(props: &Props) -> Html {
         }
     };
 
+    let name_exists: bool = props.config.contents.contains_key(&*name);
+
     if props.config.user.keypairs.is_empty() {
         html! {
             <></>
@@ -74,8 +99,9 @@ pub fn InsertContent(props: &Props) -> Html {
                     <input
                         type="text"
                         value={ (*name).clone() }
-                        onchange={on_change_name}
+                        oninput={on_change_name}
                     />
+                    <ExistsIndicator {name_exists} />
                 </div>
                 <div>
                     <p>{ "Content:" }</p>
@@ -85,7 +111,10 @@ pub fn InsertContent(props: &Props) -> Html {
                     />
                 </div>
                 <div>
-                    <button type="submit">{ "Encrypt" }</button>
+                    <button
+                        type="submit"
+                        disabled={name_exists || name.is_empty()}
+                    >{ "Encrypt" }</button>
                 </div>
             </form>
         }
