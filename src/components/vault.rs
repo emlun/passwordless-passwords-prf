@@ -158,18 +158,17 @@ pub fn Vault(props: &Props) -> Html {
     html! {
         <>
             <div>
+                <h2>{ "Keys" }</h2>
+                <CredentialsList
+                    keypairs={Rc::clone(&props.config.user.keypairs)}
+                    on_delete={on_delete_credential}
+                    on_rename={on_rename_credential}
+                />
                 <CreateButton
                     config={Rc::clone(&props.config)}
                     {on_create}
                     on_begin={|_| {}}
                     on_fail={|_| {}}
-                />
-            </div>
-            <div>
-                <CredentialsList
-                    keypairs={Rc::clone(&props.config.user.keypairs)}
-                    on_delete={on_delete_credential}
-                    on_rename={on_rename_credential}
                 />
             </div>
             <div>
