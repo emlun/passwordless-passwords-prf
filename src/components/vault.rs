@@ -150,7 +150,10 @@ pub fn Vault(props: &Props) -> Html {
                 />
             </div>
             <div>
-                <FilesList config={Rc::clone(&props.config)} />
+                <FilesList
+                    config={Rc::clone(&props.config)}
+                    on_reencrypt={on_insert.clone()}
+                />
             </div>
             <div>
                 <InsertContent

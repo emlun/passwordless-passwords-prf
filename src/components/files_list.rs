@@ -20,6 +20,7 @@ pub struct FileItemProps {
     pub config: Rc<VaultConfig>,
     pub name: String,
     pub item: Rc<EncryptedContent>,
+    pub on_reencrypt: Callback<(String, Vec<u8>)>,
 }
 
 #[function_component]
@@ -36,15 +37,20 @@ pub fn FileItem(props: &FileItemProps) -> Html {
         let decrypted = decrypted.clone();
         let config = Rc::clone(&props.config);
         let item = props.item.clone();
+        let on_reencrypt = props.on_reencrypt.clone();
+        let name = props.name.clone();
         move |_| {
             let decrypted = decrypted.clone();
             let config = Rc::clone(&config);
             let item = item.clone();
+            let on_reencrypt = on_reencrypt.clone();
+            let name = name.clone();
             spawn_local(async move {
                 match decrypt(&item, &config.user.keypairs).await {
                     Ok(dec) => {
                         console::log_1(&"Finished!".into());
-                        decrypted.set(Some(String::from_utf8(dec).unwrap()));
+                        decrypted.set(Some(String::from_utf8(dec.clone()).unwrap()));
+                        on_reencrypt.emit((name, dec));
                     }
                     Err(JsOrSerdeError::JsError(e)) => {
                         console::log_2(&"Decryption failed:".into(), &e);
@@ -119,11 +125,21 @@ pub fn FileItem(props: &FileItemProps) -> Html {
                                     { " keys:" }
                                 </p>
                                 <ul>
-                                    { props.item.recipients.iter().map(|wkp| {
-                                        let cred_id = CredentialId::from(wkp.credential_id.clone());
-                                        let name: String = props.config.get_credential_nickname(&cred_id).map(|s| s.to_string()).unwrap_or_else(|| cred_id.b64_abbrev(24));
-                                        name
-                                    }).collect::<Html>() }
+                                    {
+                                        props.item.recipients.iter()
+                                            .map(|wkp| {
+                                                let cred_id = CredentialId::from(wkp.credential_id.clone());
+                                                let name: String = props.config.get_credential_nickname(&cred_id)
+                                                    .map(|s| s.to_string())
+                                                    .unwrap_or_else(|| cred_id.b64_abbrev(24));
+                                                html! {
+                                                    <li key={cred_id.b64url()}>
+                                                        { name }
+                                                    </li>
+                                                }
+                                            })
+                                            .collect::<Html>()
+                                    }
                                 </ul>
                             </>
                         }
@@ -141,6 +157,7 @@ pub fn FileItem(props: &FileItemProps) -> Html {
 #[derive(PartialEq, Properties)]
 pub struct Props {
     pub config: Rc<VaultConfig>,
+    pub on_reencrypt: Callback<(String, Vec<u8>)>,
 }
 
 #[function_component]
@@ -156,6 +173,7 @@ pub fn FilesList(props: &Props) -> Html {
                         config={Rc::clone(&props.config)}
                         name={name.clone()}
                         item={item}
+                        on_reencrypt={props.on_reencrypt.clone()}
                     />
                 </li>
             }
