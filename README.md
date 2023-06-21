@@ -14,22 +14,24 @@ $ trunk serve
 $ $BROWSER http://localhost:8080
 ```
 
-Use https://github.com/emlun/yubikey-manager/tree/experiments/fido-vault-prf to
-set up the vault and generate passwords (for now, may be added here too
-eventually):
 
+Building
+---
+
+
+Build static web assets to `dist/`:
+
+```sh
+$ export RP_ID="example.org"
+$ export RP_NAME="Passwordless Passwords demo"
+$ trunk build --release
 ```
-$ poetry install
-$ poetry run ykman fido vault register
-$ poetry run ykman fido vault generate foo
-$ poetry run ykman fido vault export
-```
 
-Then paste the output from the above `export` command into the "Import vault config" box.
+Set the `RP_ID` environment variable to the domain where the app will be hosted.
+The `RP_NAME` value may be shown to users during credential registration.
 
-If running the web app hosted somewhere else than `localhost`, you must set the
-`--rp-id` option to match when initializing the vault:
+Build a Docker image, run the following after the above:
 
-```
-$ poetry run ykman fido vault register --rp-id example.org
+```sh
+$ docker build .
 ```
