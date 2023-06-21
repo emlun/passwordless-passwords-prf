@@ -30,8 +30,8 @@ $ trunk build --release
 Set the `RP_ID` environment variable to the domain where the app will be hosted.
 The `RP_NAME` value may be shown to users during credential registration.
 
-Build a Docker image, run the following after the above:
+Build a Docker image:
 
 ```sh
-$ docker build .
+$ docker build . --build-arg RP_ID="example.org" --build-arg RP_NAME="Passwordless Passwords demo"
 ```
