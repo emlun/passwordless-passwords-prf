@@ -39,8 +39,11 @@ type AesIv = [u8; AES_IV_LENGTH];
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct WrappedKeypair {
+    #[serde(with = "crate::data::base64")]
     wrapped_private_key: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     pub iv: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     additional_data: Vec<u8>,
     pub nickname: Option<String>,
 }
@@ -53,10 +56,15 @@ impl WrappedKeypair {
 
 #[derive(Serialize, Deserialize)]
 pub struct WrappedKeypairAdditionalData {
+    #[serde(with = "crate::data::base64")]
     credential_id: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     pubkey: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     pub prf_salt: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     hkdf_salt: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     hkdf_info: Vec<u8>,
 }
 
@@ -68,15 +76,21 @@ impl WrappedKeypairAdditionalData {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct WrappedContentKey {
+    #[serde(with = "crate::data::base64")]
     pub credential_id: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     wrapping_exchange_pubkey: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     wrapped_content_key: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct EncryptedContent {
+    #[serde(with = "crate::data::base64")]
     ciphertext: Vec<u8>,
-    iv: AesIv,
+    #[serde(with = "crate::data::base64")]
+    iv: Vec<u8>,
+    #[serde(with = "crate::data::base64")]
     additional_data: Vec<u8>,
     pub recipients: Vec<WrappedContentKey>,
 }
@@ -401,7 +415,7 @@ pub async fn encrypt(
 
     Ok(EncryptedContent {
         ciphertext: Uint8Array::new(&ciphertext).to_vec(),
-        iv,
+        iv: iv.to_vec(),
         additional_data: additional_data_bytes,
         recipients: wrapping_keys,
     })

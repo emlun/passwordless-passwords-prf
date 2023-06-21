@@ -1,5 +1,4 @@
-use base64::Engine;
-use js_sys::ArrayBuffer;
+use ::base64::Engine;
 use js_sys::Uint8Array;
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,51 +10,57 @@ use crate::crypto::gen_random;
 
 pub mod vault;
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(try_from = "&str", into = "String")]
-pub struct Base64(pub Vec<u8>);
+pub mod base64 {
+    use ::base64::Engine;
+    use serde::Deserialize;
+    use serde::Deserializer;
+    use serde::Serialize;
+    use serde::Serializer;
 
-impl TryFrom<&str> for Base64 {
-    type Error = base64::DecodeError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Ok(Self(base64::engine::general_purpose::STANDARD.decode(s)?))
+    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+    pub struct Base64Wrapper {
+        #[serde(rename = "$base64")]
+        base64: String,
     }
-}
 
-impl TryFrom<ArrayBuffer> for Base64 {
-    type Error = <Self as TryFrom<Uint8Array>>::Error;
-    fn try_from(arr: ArrayBuffer) -> Result<Self, Self::Error> {
-        Self::try_from(Uint8Array::new(&arr))
+    impl From<&Vec<u8>> for Base64Wrapper {
+        fn from(v: &Vec<u8>) -> Self {
+            Self {
+                base64: ::base64::engine::general_purpose::STANDARD.encode(v),
+            }
+        }
     }
-}
 
-impl From<Base64> for String {
-    fn from(Base64(v): Base64) -> Self {
-        base64::engine::general_purpose::STANDARD.encode(v)
+    impl TryFrom<Base64Wrapper> for Vec<u8> {
+        type Error = base64::DecodeError;
+        fn try_from(v: Base64Wrapper) -> Result<Self, Self::Error> {
+            Ok(::base64::engine::general_purpose::STANDARD.decode(v.base64)?)
+        }
     }
-}
 
-impl TryFrom<&Base64> for Uint8Array {
-    type Error = std::num::TryFromIntError;
-    fn try_from(Base64(v): &Base64) -> Result<Self, Self::Error> {
-        let u = Uint8Array::new_with_length(v.len().try_into()?);
-        u.copy_from(v);
-        Ok(u)
+    pub fn deserialize<'de, D, T>(d: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: TryFrom<Base64Wrapper>,
+        <T as TryFrom<Base64Wrapper>>::Error: std::fmt::Display,
+    {
+        let b64: Base64Wrapper = Deserialize::deserialize(d)?;
+        T::try_from(b64).map_err(|e| serde::de::Error::custom(e))
     }
-}
 
-impl TryFrom<Uint8Array> for Base64 {
-    type Error = std::num::TryFromIntError;
-    fn try_from(arr: Uint8Array) -> Result<Self, Self::Error> {
-        let mut result = Base64(vec![0; usize::try_from(arr.byte_length())?]);
-        arr.copy_to(&mut result.0);
-        Ok(result)
+    pub fn serialize<'t, S, T>(v: &'t T, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        Base64Wrapper: From<&'t T>,
+    {
+        let b64: Base64Wrapper = Base64Wrapper::from(v);
+        b64.serialize(s)
     }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(from = "Base64", into = "Base64")]
-pub struct UserHandle(Vec<u8>);
+#[serde(transparent)]
+pub struct UserHandle(#[serde(with = "crate::data::base64")] Vec<u8>);
 
 impl UserHandle {
     pub async fn generate() -> Result<Self, JsValue> {
@@ -68,31 +73,8 @@ impl UserHandle {
     }
 }
 
-impl From<UserHandle> for Base64 {
-    fn from(UserHandle(v): UserHandle) -> Self {
-        Self(v)
-    }
-}
-
-impl From<Base64> for UserHandle {
-    fn from(Base64(v): Base64) -> Self {
-        Self(v)
-    }
-}
-
 #[derive(Clone, PartialEq)]
-pub struct Base64Url(pub String);
-
-#[derive(Clone, PartialEq)]
-// #[derive(Clone, Deserialize, PartialEq, Serialize)]
-// #[serde(from = "Base64", into = "Base64")]
 pub struct CredentialId(Vec<u8>);
-
-// impl From<CredentialId> for Base64 {
-//     fn from(cred_id: CredentialId) -> Self {
-//         Self(Uint8Array::new(&cred_id.raw).to_vec())
-//     }
-// }
 
 impl From<Vec<u8>> for CredentialId {
     fn from(v: Vec<u8>) -> Self {
@@ -103,7 +85,7 @@ impl From<Vec<u8>> for CredentialId {
 impl CredentialId {
     pub fn b64_abbrev(&self, max_len: usize) -> String {
         let Self(v) = self;
-        let b64 = base64::engine::general_purpose::STANDARD.encode(v);
+        let b64 = ::base64::engine::general_purpose::STANDARD.encode(v);
 
         if b64.len() <= max_len {
             b64.clone()
@@ -114,7 +96,7 @@ impl CredentialId {
 
     pub fn b64url(&self) -> String {
         let Self(v) = self;
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v)
+        ::base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v)
     }
 }
 
@@ -139,7 +121,7 @@ impl From<&CredentialId> for Uint8Array {
 impl From<CredentialId> for yew::virtual_dom::Key {
     fn from(val: CredentialId) -> Self {
         let CredentialId(v) = val;
-        let b64 = base64::engine::general_purpose::STANDARD.encode(v);
+        let b64 = ::base64::engine::general_purpose::STANDARD.encode(v);
         b64.into()
     }
 }
